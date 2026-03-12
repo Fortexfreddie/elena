@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum UserRole {
+  superadmin
+  admin
+  member
+  guest
+}
+
+enum OnboardingStatus {
+  pending
+  approved
+  denied
+}
+
+enum BountyStatus {
+  open
+  in_progress
+  submitted
+  completed
+  dropped
+}
+
+enum HitlStatus {
+  pending
+  confirmed
+  cancelled
+  expired
+}
+
+enum OnboardingSessionStatus {
+  in_progress
+  pending_approval
+  approved
+  denied
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id                String           @id @default(uuid())
+  telegramId        String           @unique
+  username          String?
+  displayName       String
+  role              UserRole         @default(guest)
+  personaJson       Json             @default("{}")
+  preferencesJson   Json             @default("{}")
+  onboardingStatus  OnboardingStatus @default(pending)
+  isFoundingMember  Boolean          @default(false)
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  bounties           Bounty[]            @relation("CreatedBounties")
+  assignedBounties   Bounty[]            @relation("AssignedBounties")
+  secrets            Secret[]
+  auditLogs          AuditLog[]
+  feedback           Feedback[]
+  reminders          Reminder[]
+  hitlPending        HitlPending[]
+  onboardingApproved OnboardingSession[] @relation("ApprovedBy")
+}
+
+model Bounty {
+  id             String       @id @default(uuid())
+  title          String
+  description    String?
+  status         BountyStatus @default(open)
+  platform       String?
+  deadline       DateTime?
+  submissionLink String?
+  rpcUrl         String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  createdBy    User   @relation("CreatedBounties", fields: [createdById], references: [id])
+  createdById  String
+  assignedTo   User?  @relation("AssignedBounties", fields: [assignedToId], references: [id])
+  assignedToId String?
+}
+
+model Secret {
+  id             String    @id @default(uuid())
+  label          String
+  encryptedValue String
+  iv             String
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  // No updatedAt — secrets must never be updated in place.
+  // Rotation = INSERT new row (fresh IV) + DELETE old row in transaction.
+
+  owner       User   @relation(fields: [ownerUserId], references: [id])
+  ownerUserId String
+
+  @@unique([ownerUserId, label])
+}
+
+model AuditLog {
+  id               String   @id @default(uuid())
+  actionType       String
+  toolCalled       String?
+  modelUsed        String?
+  agentName        String?
+  sanitizedSummary String?
+  latencyMs        Int?
+  jobId            String?
+  createdAt        DateTime @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String?
+}
+
+model Feedback {
+  id              String    @id @default(uuid())
+  feedbackText    String
+  langfuseTraceId String?
+  applied         Boolean   @default(false)
+  appliedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+}
+
+model OnboardingSession {
+  id               String                  @id @default(uuid())
+  telegramId       String
+  conversationJson Json                    @default("[]")
+  builtProfileJson Json                    @default("{}")
+  status           OnboardingSessionStatus @default(in_progress)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  approvedBy   User?   @relation("ApprovedBy", fields: [approvedById], references: [id])
+  approvedById String?
+}
+
+model Reminder {
+  id                  String    @id @default(uuid())
+  chatId              String
+  confirmationMessage String
+  reminderMessage     String
+  scheduledFor        DateTime
+  sent                Boolean   @default(false)
+  sentAt              DateTime?
+  createdAt           DateTime  @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+}
+
+model HitlPending {
+  id             String     @id @default(uuid())
+  jobId          String     @unique
+  toolName       String
+  toolParamsJson Json
+  chatId         String
+  expiresAt      DateTime
+  status         HitlStatus @default(pending)
+  createdAt      DateTime   @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+}
