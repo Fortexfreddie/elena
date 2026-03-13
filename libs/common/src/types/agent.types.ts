@@ -1,4 +1,4 @@
-import type { ParsedMessage } from './telegram.types.js';
+import type { ParsedMessage } from './telegram.types';
 import type { FunctionCall } from '@google/genai';
 
 /**

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
-import type { AgentTool } from './base.tool.js';
+import type { AgentTool } from './base.tool';
 import type { ToolResult } from '@app/common/types/agent.types';
 
 /**
@@ -12,7 +12,7 @@ import type { ToolResult } from '@app/common/types/agent.types';
 @Injectable()
 export class CustomSearchTool implements AgentTool {
     private readonly logger = new Logger(CustomSearchTool.name);
-    
+
     // Zod isn't strictly necessary for tool metadata, we just use the interface
     name = 'custom_web_research';
     description = 'Use this tool for deep technical research on developer docs, Github repos, or specific smart contracts. Do NOT use this for generic news or facts.';
@@ -43,7 +43,7 @@ export class CustomSearchTool implements AgentTool {
     async execute(args: Record<string, unknown>): Promise<ToolResult> {
         const query = args['query'] as string;
         const domains = args['domains'] as string[] | undefined;
-        
+
         this.logger.log(`Executing custom_web_research for: ${query}`);
 
         try {

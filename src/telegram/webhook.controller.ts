@@ -5,13 +5,18 @@ import {
     UseGuards,
     Logger,
     HttpCode,
+    Inject,
+    forwardRef
 } from '@nestjs/common';
-import { TelegramSecretGuard } from './guards/telegram-secret.guard.js';
-import { parseMessage } from './message.parser.js';
-import { shouldProcess } from './heuristic-gate.js';
-import { ReactionSenderService } from './reaction.sender.js';
-import { ReplySenderService } from './reply.sender.js';
-import { QueueService } from '../queue/queue.service.js';
+import { TelegramSecretGuard } from './guards/telegram-secret.guard';
+import { parseMessage } from './message.parser';
+import { shouldProcess } from './heuristic-gate';
+import { ReactionSenderService } from './reaction.sender';
+import { ReplySenderService } from './reply.sender';
+import { QueueService } from '../queue/queue.service';
+import { ProfileBuilder } from '../personas/profile-builder.service';
+import { PrismaService } from '@app/database';
+import { ClaimAdminCommand } from '../onboarding/claim-admin.command';
 import type { TelegramUpdate } from '@app/common/types/telegram.types';
 import { UpstashRedisService } from '@app/common';
 
@@ -41,6 +46,10 @@ export class WebhookController {
         private readonly replySender: ReplySenderService,
         private readonly queueService: QueueService,
         private readonly redisService: UpstashRedisService,
+        private readonly profileBuilder: ProfileBuilder,
+        private readonly prisma: PrismaService,
+        @Inject(forwardRef(() => ClaimAdminCommand))
+        private readonly claimAdmin: ClaimAdminCommand,
     ) {}
 
     @Post('/webhook')
@@ -64,6 +73,46 @@ export class WebhookController {
         }
 
         try {
+            // Step 0.5: Check for Callback Queries (Approval Flow)
+            if (update.callback_query) {
+                const callbackData = update.callback_query.data;
+                const fromId = String(update.callback_query.from.id);
+
+                if (callbackData && (callbackData.startsWith('approve_') || callbackData.startsWith('deny_'))) {
+                    this.logger.log(`[APPROVAL_TRACE] Founder ${fromId} clicked approval button: ${callbackData}`);
+                    // 1. Verify founder status
+                    const user = await this.prisma.user.findUnique({
+                        where: { telegramId: fromId },
+                        select: { isFoundingMember: true },
+                    });
+
+                    if (!user?.isFoundingMember) {
+                        this.logger.warn(`Non-founder ${fromId} tried to approve/deny onboarding.`);
+                        return { ok: true };
+                    }
+
+                    // 2. Parse data: "approve_sessionId|displayName"
+                    const [actionWithId, displayName] = callbackData.split('|');
+                    
+                    if (actionWithId.startsWith('approve_')) {
+                        const sessionId = actionWithId.replace('approve_', '');
+                        await this.profileBuilder.finalize(sessionId);
+                        await this.replySender.sendReply(
+                            String(update.callback_query.message?.chat.id),
+                            `✅ *Approved:* ${displayName} is now part of the squad.`
+                        );
+                    } else if (actionWithId.startsWith('deny_')) {
+                        const sessionId = actionWithId.replace('deny_', '');
+                        await this.profileBuilder.reject(sessionId);
+                        await this.replySender.sendReply(
+                            String(update.callback_query.message?.chat.id),
+                            `❌ *Denied:* ${displayName} request rejected.`
+                        );
+                    }
+                    
+                    return { ok: true };
+                }
+            }
             // Check for HITL commands before parsing
             const messageText = update.message?.text;
             if (messageText) {
@@ -79,6 +128,24 @@ export class WebhookController {
                     this.logger.log(
                         `HITL cancel received: ${messageText}`,
                     );
+                    return { ok: true };
+                }
+                if (lower === '/claim-admin') {
+                    const from = update.message?.from;
+                    if (from) {
+                        const result = await this.claimAdmin.execute(
+                            String(from.id),
+                            from.first_name,
+                            from.username
+                        );
+                        await this.replySender.sendReply(String(update.message?.chat.id), result);
+                    }
+                    return { ok: true };
+                }
+                if (lower === '/clear') {
+                    const chatId = String(update.message?.chat.id);
+                    await this.redisService.client.del(`hot:${chatId}`);
+                    await this.replySender.sendReply(chatId, '🗑️ *Elena\'s hot memory cleared.* Context reset to Day 1.');
                     return { ok: true };
                 }
             }

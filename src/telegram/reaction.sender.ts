@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ReplySenderService } from './reply.sender.js';
+import { ReplySenderService } from './reply.sender';
 
 /**
  * Sends a "thinking" reaction to the message after Stage 1 pass.

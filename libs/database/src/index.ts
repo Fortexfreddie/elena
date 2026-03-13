@@ -1,2 +1,2 @@
-export { PrismaService } from './database.service.js';
-export { PrismaModule } from './database.module.js';
+export { PrismaService } from './database.service';
+export { PrismaModule } from './database.module';

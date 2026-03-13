@@ -1,15 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
-import { BaseAgent } from './base.agent.js';
+import { BaseAgent } from './base.agent';
 import { GeminiService } from '@app/common/gemini/gemini.service';
 import { GEMINI_MODELS } from '@app/common/gemini/gemini.constants';
 import type { AgentContext, AgentResponse } from '@app/common/types/agent.types';
-import { CoderAgent } from './coder.agent.js';
-import { ReviewerAgent } from './reviewer.agent.js';
-import { ResearcherAgent } from './researcher.agent.js';
-import { BrainstormAgent } from './brainstorm.agent.js';
-import { TaskAgent } from './task.agent.js';
+import { CoderAgent } from './coder.agent';
+import { ReviewerAgent } from './reviewer.agent';
+import { ResearcherAgent } from './researcher.agent';
+import { BrainstormAgent } from './brainstorm.agent';
+import { TaskAgent } from './task.agent';
 
 @Injectable()
 export class ManagerAgent extends BaseAgent {
@@ -60,7 +60,7 @@ If the user asks for multi-step technical reasoning, code generation, extensive 
      */
     async execute(routeTo: string, context: AgentContext): Promise<AgentResponse> {
         this.logger.log(`Manager received execution request. Original Filter route decision: ${routeTo}`);
-        
+
         // If the filter specifically requested a specialist, we bypass the Manager's reasoning to save tokens.
         if (routeTo !== 'manager' && ['coder', 'reviewer', 'researcher', 'brainstorm', 'task'].includes(routeTo)) {
             this.logger.log(`Bypassing Manager reasoning; directly executing delegate: ${routeTo}`);
@@ -76,12 +76,12 @@ If the user asks for multi-step technical reasoning, code generation, extensive 
             if (call) {
                 const agentName = (call.args?.['agent'] as string) ?? 'brainstorm';
                 this.logger.log(`Manager agent decided to delegate to: ${agentName} (Reason: ${call.args?.['reason']})`);
-                
+
                 // Invoke the specialist with the original context
                 return this.invokeSpecialist(agentName, context);
             }
         }
-        
+
         // Return direct text response from Manager
         return response;
     }

@@ -1,4 +1,4 @@
-import { ElenaError } from '../types/errors.js';
+import { ElenaError } from '../types/errors';
 
 interface RetryOptions {
     /** Max number of attempts (including first try) */

@@ -38,10 +38,25 @@ export function shouldProcess(parsed: ParsedMessage): boolean {
         return true;
     }
 
+    // Technical Keyword Check (Active Listening)
+    // Allows technical developer discussions to reach the FilterAgent even without a tag
+    if (containsTechnicalKeywords(lower)) {
+        return true;
+    }
+
     // Everything else in a group chat → discard
     // Note: /confirm_ and /cancel_ are handled by the controller BEFORE
     // the gate runs, so they never reach this point.
     return false;
+}
+
+import { TECHNICAL_KEYWORDS } from '@app/common/gemini/gemini.constants';
+
+/**
+ * Stage 1.5 Keyword Heuristic for developer group chats.
+ */
+function containsTechnicalKeywords(lowerText: string): boolean {
+    return TECHNICAL_KEYWORDS.some((keyword) => lowerText.includes(keyword));
 }
 
 /**

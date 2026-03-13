@@ -45,11 +45,18 @@ export function parseMessage(
     // Check if this is a reply to the bot's message
     const replyToBot = isReplyToBot(message, botId);
 
-    // Extract text (may be null for media-only messages)
-    const text = message.text ?? null;
+    // Extract text/caption (caption is used for media messages)
+    const text = message.text ?? message.caption ?? null;
 
     // Extract media
     const media = extractMedia(message);
+
+    // Context if this is a reply
+    const replyContext = message.reply_to_message ? {
+        text: message.reply_to_message.text ?? (message.reply_to_message.photo ? '[image]' : '[media]'),
+        userId: String(message.reply_to_message.from?.id ?? 'unknown'),
+        displayName: message.reply_to_message.from?.first_name ?? 'Someone',
+    } : null;
 
     return {
         userId,
@@ -65,6 +72,7 @@ export function parseMessage(
         mediaFileId: media.fileId,
         mediaFileSize: media.fileSize,
         mediaType: media.mimeType,
+        replyToContext: replyContext,
         rawUpdate: update,
     };
 }

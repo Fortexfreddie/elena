@@ -6,8 +6,8 @@ import {
     type GenerateContentConfig,
     type FunctionCall,
 } from '@google/genai';
-import { ModelError } from '../types/errors.js';
-import { GEMINI_MODELS, EMBEDDING_DIMENSIONS, type GeminiModel } from './gemini.constants.js';
+import { ModelError } from '../types/errors';
+import { GEMINI_MODELS, EMBEDDING_DIMENSIONS, type GeminiModel } from './gemini.constants';
 
 /**
  * Single wrapper around @google/genai SDK.
@@ -63,7 +63,7 @@ export class GeminiService {
 
             // Retry with FALLBACK model on 429 (rate limit), 500 (server error), or 503 (high demand)
             if (
-                (model === GEMINI_MODELS.PRO || model === GEMINI_MODELS.FLASH) &&
+                (model === GEMINI_MODELS.PRO || model === GEMINI_MODELS.FLASH || model === GEMINI_MODELS.FILTER) &&
                 (statusCode === 429 || statusCode === 500 || statusCode === 503)
             ) {
                 this.logger.warn(

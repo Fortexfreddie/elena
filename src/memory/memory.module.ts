@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { HotMemoryService } from './hot.memory.service.js';
-import { WarmMemoryService } from './warm.memory.service.js';
-import { ColdMemoryService } from './cold.memory.service.js';
-import { AssemblerService } from './assembler.service.js';
+import { HotMemoryService } from './hot.memory.service';
+import { WarmMemoryService } from './warm.memory.service';
+import { ColdMemoryService } from './cold.memory.service';
+import { AssemblerService } from './assembler.service';
 import { PrismaModule } from '@app/database';
 import { GeminiModule, UpstashRedisModule } from '@app/common';
 
@@ -21,4 +21,4 @@ import { GeminiModule, UpstashRedisModule } from '@app/common';
         AssemblerService
     ]
 })
-export class MemoryModule {}
+export class MemoryModule { }

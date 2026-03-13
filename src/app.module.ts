@@ -9,18 +9,18 @@ import {
     extractRedisPort,
     extractRedisPassword,
 } from '@app/common/utils/redis-url';
-import { TelegramModule } from './telegram/telegram.module.js';
-import { QueueModule } from './queue/queue.module.js';
-import { AgentsModule } from './agents/agents.module.js';
-import { MemoryModule } from './memory/memory.module.js';
-import { ToolsModule } from './tools/tools.module.js';
-import { PersonasModule } from './personas/personas.module.js';
-import { SafetyModule } from './safety/safety.module.js';
-import { SecretsModule } from './secrets/secrets.module.js';
-import { OnboardingModule } from './onboarding/onboarding.module.js';
-import { AuditModule } from './audit/audit.module.js';
-import { ScheduledModule } from './scheduled/scheduled.module.js';
-import { HealthController } from './health.controller.js';
+import { TelegramModule } from './telegram/telegram.module';
+import { QueueModule } from './queue/queue.module';
+import { AgentsModule } from './agents/agents.module';
+import { MemoryModule } from './memory/memory.module';
+import { ToolsModule } from './tools/tools.module';
+import { PersonasModule } from './personas/personas.module';
+import { SafetyModule } from './safety/safety.module';
+import { SecretsModule } from './secrets/secrets.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
+import { AuditModule } from './audit/audit.module';
+import { ScheduledModule } from './scheduled/scheduled.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [

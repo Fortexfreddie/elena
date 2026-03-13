@@ -1,4 +1,4 @@
-import { TELEGRAM_MAX_CHARS } from '../gemini/gemini.constants.js';
+import { TELEGRAM_MAX_CHARS } from '../gemini/gemini.constants';
 
 interface MarkdownState {
     isBold: boolean;

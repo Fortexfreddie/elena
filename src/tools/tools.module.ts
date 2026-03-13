@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { RegistryService } from './registry.service.js';
-import { ExecutorService } from './executor.service.js';
-import { CustomSearchTool } from './custom-search.tool.js';
+import { RegistryService } from './registry.service';
+import { ExecutorService } from './executor.service';
+import { CustomSearchTool } from './custom-search.tool';
 
 @Module({
     providers: [
@@ -14,4 +14,4 @@ import { CustomSearchTool } from './custom-search.tool.js';
         ExecutorService
     ]
 })
-export class ToolsModule {}
+export class ToolsModule { }

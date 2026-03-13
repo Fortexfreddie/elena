@@ -25,6 +25,12 @@ export interface ParsedMessage {
     mediaFileSize: number | null;
     /** MIME type string, e.g. 'image/jpeg', 'audio/ogg' — null if no media */
     mediaType: string | null;
+    /** Context if this is a reply to another message */
+    replyToContext: {
+        text: string | null;
+        userId: string;
+        displayName: string;
+    } | null;
     /** The raw Telegram Update object for fallback access */
     rawUpdate: TelegramUpdate;
 }
@@ -36,20 +42,47 @@ export interface ParsedMessage {
 export interface TelegramUpdate {
     update_id: number;
     message?: TelegramMessage;
+    callback_query?: TelegramCallbackQuery;
+}
+
+export interface TelegramCallbackQuery {
+    id: string;
+    from: TelegramUser;
+    message?: TelegramMessage;
+    data?: string;
 }
 
 export interface TelegramMessage {
     message_id: number;
     from?: TelegramUser;
-    chat: TelegramChat;
+    sender_chat?: TelegramChat; 
     date: number;
+    chat: TelegramChat;
     text?: string;
+    entities?: MessageEntity[]; 
+    caption?: string;
+    caption_entities?: MessageEntity[]; 
     reply_to_message?: TelegramMessage;
+    forward_origin?: any; 
+    edit_date?: number; 
+    media_group_id?: string; 
+    has_protected_content?: boolean; 
+    via_bot?: TelegramUser; 
     photo?: TelegramPhotoSize[];
     voice?: TelegramVoice;
     video?: TelegramVideo;
     video_note?: TelegramVideoNote;
     document?: TelegramDocument;
+}
+
+export interface MessageEntity {
+    type: string;
+    offset: number;
+    length: number;
+    url?: string;
+    user?: TelegramUser;
+    language?: string;
+    custom_emoji_id?: string;
 }
 
 export interface TelegramUser {

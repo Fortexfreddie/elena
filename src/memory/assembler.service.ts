@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HotMemoryService } from './hot.memory.service.js';
-import { WarmMemoryService } from './warm.memory.service.js';
-import { ColdMemoryService } from './cold.memory.service.js';
+import { HotMemoryService } from './hot.memory.service';
+import { WarmMemoryService } from './warm.memory.service';
+import { ColdMemoryService } from './cold.memory.service';
 import type { AssembledContext, WarmResult, BountyInfo } from '@app/common/types/agent.types';
 
 @Injectable()
@@ -12,14 +12,14 @@ export class AssemblerService {
         private readonly hotMemory: HotMemoryService,
         private readonly warmMemory: WarmMemoryService,
         private readonly coldMemory: ColdMemoryService
-    ) {}
+    ) { }
 
     /**
      * Combines all three memory tiers into a single AssembledContext object for agents.
      */
     async assemble(chatId: string, telegramId: string): Promise<AssembledContext> {
         const startTime = Date.now();
-        
+
         // 1. Fetch Hot and Cold memory in parallel
         const [hotMessages, userProfile] = await Promise.all([
             this.hotMemory.getHistory(chatId),

@@ -3,14 +3,14 @@ import { GeminiService } from '@app/common/gemini/gemini.service';
 import { GEMINI_MODELS } from '@app/common/gemini/gemini.constants';
 import { Type } from '@google/genai';
 import { ModelError } from '@app/common/types/errors';
-import type { FilterDecision } from '@app/common/types/agent.types';
+import type { AgentContext, FilterDecision, MediaContent } from '@app/common/types/agent.types';
 import type { ParsedMessage } from '@app/common/types/telegram.types';
 import type { HotMemoryEntry } from '@app/common/types/agent.types';
 
 /**
  * Filter Agent — Stage 2 of the pipeline.
  *
- * Uses gemini-3.1-flash-lite-preview (cheapest model — no thinking needed for routing).
+ * Uses gemini-1.5-flash (configured in GEMINI_MODELS.FILTER).
  * Returns a FilterDecision: ignore, reply (direct), or route (to sub-agent).
  *
  * Called after Stage 1 heuristic gate passes.
@@ -26,11 +26,13 @@ export class FilterAgent {
      *
      * @param parsed The parsed message from Telegram
      * @param hotMessages Recent chat context for decision-making
+     * @param mediaContent Optional media (pixels) for multimodal routing
      * @returns FilterDecision with action + optional reply/routeTo
      */
     async route(
         parsed: ParsedMessage,
         hotMessages: HotMemoryEntry[] = [],
+        mediaContent?: MediaContent,
     ): Promise<FilterDecision> {
         const messageText = parsed.text ?? '[media message]';
 
@@ -39,30 +41,42 @@ export class FilterAgent {
             .map((m) => `${m.role}: ${m.text}`)
             .join('\n');
 
-        const systemPrompt = `You are Elena's message router. You decide what to do with each incoming message.
-You are NOT the responder — you only decide routing.
+        const systemPrompt = `You are Elena's message router in a high-stakes developer group chat.
+            You decide if Elena should: 
+            1. Ignore the message.
+            2. Reply directly (for small talk).
+            3. Route to a specialist (for real work).
 
-Rules:
-- ONLY use action = "reply" if someone says "hi", "hello", "thank you" or basic pleasantries. Your reply must be brief.
-- FOR ALL OTHER MESSAGES (questions about yourself, Elena, identity, history, memory, context, reasoning, facts): action = "route" and routeTo = "manager".
-- DO NOT answer questions about identity or memory. Always route these to the manager.
-- If the message requires research, coding, bounty management, brainstorming, or task management: action = "route" and specify the sub-agent.
-- If the message is not directed at Elena or is irrelevant: action = "ignore".
+            PROACTIVE LISTENING RULES:
+            - If a message is NOT directed at Elena (@ElenaSquadBot) AND is just casual chat, action = "ignore".
+            - CRITICAL: Even if NOT tagged, if you see technical questions, bugs, or discussions about Solana, Next.js, Flutter, or "The Chatter Project", action = "route" to the appropriate specialist. Elena should jump in to provide value.
+            - If Elena IS tagged (@ElenaSquadBot), you MUST either "reply" or "route". Never ignore a direct tag.
+            - If the user provides an image AND an explicit request (e.g., "describe this", "what is this?"), action = "route" and routeTo = "manager". 
+            - In Private Chats (DMs), NEVER ignore a request even if it seems non-technical. Elena is a personal assistant there.
 
-Sub-agents available: manager, coder, reviewer, researcher, brainstorm, task
+            ROUTING RULES:
+            - SMALL TALK (hi, thanks, etc.): action = "reply".
+            - IDENTITY/CONTEXT (Who are you? Who am I?): action = "route", routeTo = "manager".
+            - TECH/WORK (Code, research, tasks): action = "route", specify the sub-agent (coder, researcher, etc.).
 
-You MUST respond by calling the route_decision function.`;
+            Sub-agents: manager, coder, reviewer, researcher, brainstorm, task`;
 
-        const userMessage = contextLines
-            ? `Recent context:\n${contextLines}\n\nNew message from user ${parsed.userId}:\n${messageText}`
-            : `New message from user ${parsed.userId}:\n${messageText}`;
+        const chatType = parsed.isDm ? 'Private Chat (DM)' : 'Group Chat';
+        const userMessage = `[Mode: ${chatType}]
+${contextLines ? `Recent context:\n${contextLines}\n\n` : ''}New message from user ${parsed.userId}:\n${messageText}`;
 
         const startTime = Date.now();
 
         try {
+            const contents: any[] = [{ role: 'user', parts: [{ text: userMessage }] }];
+            
+            if (mediaContent?.inlineData) {
+                contents[0].parts.push({ inlineData: mediaContent.inlineData });
+            }
+
             const response = await this.geminiService.generateContent(
                 GEMINI_MODELS.FILTER,
-                [{ role: 'user', parts: [{ text: userMessage }] }],
+                contents,
                 {
                     systemInstruction: systemPrompt,
                     tools: [
@@ -138,6 +152,7 @@ You MUST respond by calling the route_decision function.`;
             }
 
             // If model returned text instead of function call, or failed tool call
+            this.logger.warn(`Model failed to provide valid route_decision. Defaulting to manager.`);
             return {
                 action: 'route',
                 routeTo: 'manager',

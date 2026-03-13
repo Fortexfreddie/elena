@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { AgentTool } from './base.tool.js';
-import { CustomSearchTool } from './custom-search.tool.js';
+import type { AgentTool } from './base.tool';
+import { CustomSearchTool } from './custom-search.tool';
 import type { FunctionDeclaration } from '@google/genai';
 
 /**

@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
-import { FilterAgent } from './filter.agent.js';
-import { CoderAgent } from './coder.agent.js';
-import { ReviewerAgent } from './reviewer.agent.js';
-import { ResearcherAgent } from './researcher.agent.js';
-import { BrainstormAgent } from './brainstorm.agent.js';
-import { TaskAgent } from './task.agent.js';
-import { ManagerAgent } from './manager.agent.js';
+import { FilterAgent } from './filter.agent';
+import { CoderAgent } from './coder.agent';
+import { ReviewerAgent } from './reviewer.agent';
+import { ResearcherAgent } from './researcher.agent';
+import { BrainstormAgent } from './brainstorm.agent';
+import { TaskAgent } from './task.agent';
+import { ManagerAgent } from './manager.agent';
+import { OnboardingAgent } from './onboarding.agent';
 
 @Module({
     providers: [
@@ -15,11 +16,13 @@ import { ManagerAgent } from './manager.agent.js';
         ResearcherAgent,
         BrainstormAgent,
         TaskAgent,
-        ManagerAgent
+        ManagerAgent,
+        OnboardingAgent,
     ],
     exports: [
         FilterAgent,
-        ManagerAgent
+        ManagerAgent,
+        OnboardingAgent,
     ],
 })
 export class AgentsModule { }

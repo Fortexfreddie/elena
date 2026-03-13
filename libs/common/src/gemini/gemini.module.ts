@@ -1,5 +1,5 @@
 import { Module, Global } from '@nestjs/common';
-import { GeminiService } from './gemini.service.js';
+import { GeminiService } from './gemini.service';
 
 @Global()
 @Module({

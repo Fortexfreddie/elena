@@ -46,3 +46,13 @@ export const HITL_TTL_SECONDS = 300; // 5 minutes
 
 /** Embedding chunk limit in words (maps to ~2048 token limit) */
 export const EMBEDDING_CHUNK_MAX_WORDS = 1500;
+
+/** Technical keywords for active listening and routing heuristics */
+export const TECHNICAL_KEYWORDS = [
+    'solana', 'rpc', 'wallet', 'token', 'mint', 'transaction', 'tx',
+    'bug', 'fix', 'error', 'failed', 'issue', 'crash',
+    'flutter', 'nextjs', 'react', 'prisma', 'redis', 'bullmq',
+    'nest', 'api', 'webhook', 'backend', 'frontend',
+    'the chatter project', 'elena', 'bot', 'agent',
+    'bounty', 'task', 'code', 'repo', 'github'
+];

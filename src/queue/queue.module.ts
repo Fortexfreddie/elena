@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { QueueService } from './queue.service.js';
-import { MessageProcessor } from './message.processor.js';
-import { QUEUE_NAMES } from './job.types.js';
-import { AgentsModule } from '../agents/agents.module.js';
-import { TelegramModule } from '../telegram/telegram.module.js';
-import { MemoryModule } from '../memory/index.js';
+import { QueueService } from './queue.service';
+import { MessageProcessor } from './message.processor';
+import { QUEUE_NAMES } from './job.types';
+import { AgentsModule } from '../agents/agents.module';
+import { TelegramModule } from '../telegram/telegram.module';
+import { MemoryModule } from '../memory/index';
 import { forwardRef } from '@nestjs/common';
+import { OnboardingModule } from '../onboarding/onboarding.module';
 
 /**
  * Queue module — registers BullMQ queues with shared ioredis connection.
@@ -37,6 +38,7 @@ if (process.env['PROCESS_TYPE'] === 'worker') {
         ),
         AgentsModule,
         MemoryModule,
+        forwardRef(() => OnboardingModule),
         forwardRef(() => TelegramModule),
     ],
     providers,

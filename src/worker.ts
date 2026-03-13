@@ -11,10 +11,10 @@ import {
     extractRedisPort,
     extractRedisPassword,
 } from '@app/common/utils/redis-url';
-import { QueueModule } from './queue/queue.module.js';
+import { QueueModule } from './queue/queue.module';
 import { validateEnv } from '@app/config';
-import { TelegramModule } from './telegram/telegram.module.js';
-import { AgentsModule } from './agents/agents.module.js';
+import { TelegramModule } from './telegram/telegram.module';
+import { AgentsModule } from './agents/agents.module';
 
 /**
  * Worker module — imports only what the BullMQ worker needs.
@@ -60,13 +60,13 @@ import { AgentsModule } from './agents/agents.module.js';
         QueueModule,
     ],
 })
-class WorkerModule {}
+class WorkerModule { }
 
 /**
  * Worker bootstrap — separate NestJS standalone application.
  * No HTTP server. Processes BullMQ jobs only.
  *
- * Cloud Run worker service command: node dist/worker.js
+ * Cloud Run worker service command: node dist/worker
  * MUST call enableShutdownHooks — Cloud Run sends SIGTERM with 10s window.
  * BullMQ lockDuration=30000 and maxStalledCount=2 handle Gemini Pro's 15-25s latency.
  */

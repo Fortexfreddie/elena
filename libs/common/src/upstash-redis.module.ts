@@ -1,5 +1,5 @@
 import { Module, Global } from '@nestjs/common';
-import { UpstashRedisService } from './upstash-redis.service.js';
+import { UpstashRedisService } from './upstash-redis.service';
 
 /**
  * Global module for the shared @upstash/redis REST client.
@@ -10,4 +10,4 @@ import { UpstashRedisService } from './upstash-redis.service.js';
     providers: [UpstashRedisService],
     exports: [UpstashRedisService],
 })
-export class UpstashRedisModule {}
+export class UpstashRedisModule { }
