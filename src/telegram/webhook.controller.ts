@@ -162,6 +162,34 @@ export class WebhookController {
                 return { ok: true };
             }
 
+            // --- SECURITY GUARD: Group-First Requirement (Phase 3.13) ---
+            const sender = await this.prisma.user.findUnique({
+                where: { telegramId: parsed.userId },
+                select: { id: true, role: true }
+            });
+
+            if (!parsed.isDm) {
+                // In Groups: Automatically register new users as Guests
+                if (!sender) {
+                    const from = update.message?.from || update.callback_query?.from;
+                    await this.prisma.user.create({
+                        data: {
+                            telegramId: parsed.userId,
+                            displayName: from?.first_name || 'Anonymous',
+                            username: from?.username || null,
+                            role: 'guest',
+                        }
+                    });
+                    this.logger.log(`[SECURITY_TRACE] Registered unknown user ${parsed.userId} as GUEST via group chat.`);
+                }
+            } else {
+                // In DMs: If user is unknown (not in DB), ignore them completely
+                if (!sender) {
+                    this.logger.warn(`[SECURITY_TRACE] Ignoring DM from unknown user ${parsed.userId}. (Group-First Guard ACTIVE)`);
+                    return { ok: true };
+                }
+            }
+
             // Step 3: Stage 1 heuristic gate (zero cost)
             if (!shouldProcess(parsed)) {
                 return { ok: true };
