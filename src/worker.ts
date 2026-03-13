@@ -5,7 +5,12 @@ import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { LoggerModule } from 'nestjs-pino';
 import { PrismaModule } from '@app/database';
-import { GeminiModule } from '@app/common';
+import { GeminiModule, UpstashRedisModule } from '@app/common';
+import {
+    extractRedisHost,
+    extractRedisPort,
+    extractRedisPassword,
+} from '@app/common/utils/redis-url';
 import { QueueModule } from './queue/queue.module.js';
 import { validateEnv } from '@app/config';
 import { TelegramModule } from './telegram/telegram.module.js';
@@ -49,12 +54,13 @@ import { AgentsModule } from './agents/agents.module.js';
         }),
         PrismaModule,
         GeminiModule,
+        UpstashRedisModule,
         TelegramModule,
         AgentsModule,
         QueueModule,
     ],
 })
-class WorkerModule { }
+class WorkerModule {}
 
 /**
  * Worker bootstrap — separate NestJS standalone application.
@@ -86,28 +92,3 @@ bootstrap().catch((err: unknown) => {
     console.error('Failed to start Elena worker:', err);
     process.exit(1);
 });
-
-function extractRedisHost(url: string): string {
-    try {
-        return new URL(url).hostname;
-    } catch {
-        return 'localhost';
-    }
-}
-
-function extractRedisPort(url: string): number {
-    try {
-        const port = new URL(url).port;
-        return port ? parseInt(port, 10) : 6379;
-    } catch {
-        return 6379;
-    }
-}
-
-function extractRedisPassword(url: string): string {
-    try {
-        return new URL(url).password;
-    } catch {
-        return '';
-    }
-}

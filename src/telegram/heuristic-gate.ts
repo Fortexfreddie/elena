@@ -38,13 +38,9 @@ export function shouldProcess(parsed: ParsedMessage): boolean {
         return true;
     }
 
-    // HITL command check (/confirm_ or /cancel_ prefixes)
-    // These are handled separately in the controller, but pass the gate just in case
-    if (lower.startsWith('/confirm_') || lower.startsWith('/cancel_')) {
-        return true;
-    }
-
     // Everything else in a group chat → discard
+    // Note: /confirm_ and /cancel_ are handled by the controller BEFORE
+    // the gate runs, so they never reach this point.
     return false;
 }
 

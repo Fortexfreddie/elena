@@ -3,7 +3,12 @@ import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { LoggerModule } from 'nestjs-pino';
 import { PrismaModule } from '@app/database';
-import { GeminiModule } from '@app/common';
+import { GeminiModule, UpstashRedisModule } from '@app/common';
+import {
+    extractRedisHost,
+    extractRedisPort,
+    extractRedisPassword,
+} from '@app/common/utils/redis-url';
 import { TelegramModule } from './telegram/telegram.module.js';
 import { QueueModule } from './queue/queue.module.js';
 import { AgentsModule } from './agents/agents.module.js';
@@ -47,9 +52,9 @@ import { HealthController } from './health.controller.js';
         tls: {
           rejectUnauthorized: false, // Handle TLS blips
         },
-        enableOfflineQueue: true, // Waiting room for brief blips
+        enableOfflineQueue: false, // Fast-fail on dead connection after scale-to-zero wake
         connectTimeout: 20000,
-        commandTimeout: 30000, // Kept higher for slow round-trips
+        commandTimeout: 10000, // Fast enough to detect dead sockets, tolerant of network latency
         family: 4, // FORCE IPv4 (Crucial for NG ISPs)
         retryStrategy(times: number) {
           return Math.min(times * 100, 3000);
@@ -64,6 +69,9 @@ import { HealthController } from './health.controller.js';
 
     // AI
     GeminiModule,
+
+    // Upstash Redis REST client (shared)
+    UpstashRedisModule,
 
     // Feature modules
     TelegramModule,
@@ -80,35 +88,4 @@ import { HealthController } from './health.controller.js';
   ],
   controllers: [HealthController],
 })
-export class AppModule { }
-
-/**
- * Parse Redis URL components for ioredis connection.
- * Upstash URLs: rediss://default:PASSWORD@HOST:PORT
- */
-function extractRedisHost(url: string): string {
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname;
-  } catch {
-    return 'localhost';
-  }
-}
-
-function extractRedisPort(url: string): number {
-  try {
-    const parsed = new URL(url);
-    return parsed.port ? parseInt(parsed.port, 10) : 6379;
-  } catch {
-    return 6379;
-  }
-}
-
-function extractRedisPassword(url: string): string {
-  try {
-    const parsed = new URL(url);
-    return parsed.password;
-  } catch {
-    return '';
-  }
-}
+export class AppModule {}

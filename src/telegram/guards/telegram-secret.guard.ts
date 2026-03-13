@@ -3,8 +3,8 @@ import {
     ExecutionContext,
     Injectable,
     Logger,
+    UnauthorizedException,
 } from '@nestjs/common';
-import { AuthError } from '@app/common/types/errors';
 
 /**
  * Guard that validates the X-Telegram-Bot-Api-Secret-Token header.
@@ -18,7 +18,7 @@ export class TelegramSecretGuard implements CanActivate {
     constructor() {
         const secret = process.env['TELEGRAM_WEBHOOK_SECRET'];
         if (!secret) {
-            throw new AuthError('TELEGRAM_WEBHOOK_SECRET is not set');
+            throw new UnauthorizedException('TELEGRAM_WEBHOOK_SECRET is not set');
         }
         this.secret = secret;
     }
@@ -33,7 +33,7 @@ export class TelegramSecretGuard implements CanActivate {
 
         if (!headerSecret || headerSecret !== this.secret) {
             this.logger.warn('Rejected webhook request: invalid secret token');
-            throw new AuthError('Invalid Telegram webhook secret');
+            throw new UnauthorizedException('Invalid Telegram webhook secret');
         }
 
         return true;

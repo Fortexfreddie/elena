@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Bot } from 'grammy';
 import { autoRetry } from '@grammyjs/auto-retry';
 import { chunkMessage } from '@app/common/utils/chunk';
@@ -7,11 +7,14 @@ import { chunkMessage } from '@app/common/utils/chunk';
  * Sends replies to Telegram group chats via Grammy.
  * Uses @grammyjs/auto-retry to respect Telegram's retry_after on 429.
  * Chunks messages >4096 chars using the markdown-aware chunker.
+ *
+ * Bot ID is resolved eagerly at module init — no lazy race condition.
  */
 @Injectable()
-export class ReplySenderService {
+export class ReplySenderService implements OnModuleInit {
     private readonly logger = new Logger(ReplySenderService.name);
     private readonly bot: Bot;
+    private botId: number | null = null;
 
     constructor() {
         const token = process.env['TELEGRAM_BOT_TOKEN'];
@@ -24,6 +27,22 @@ export class ReplySenderService {
     }
 
     /**
+     * Eagerly resolve botId on module init.
+     * Fails fast on boot if the token is invalid.
+     */
+    async onModuleInit(): Promise<void> {
+        try {
+            const me = await this.bot.api.getMe();
+            this.botId = me.id;
+            this.logger.log(`Bot ID resolved: ${String(this.botId)}`);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`Failed to resolve bot ID on init: ${message}`);
+            throw error; // Fail fast — bot token is likely invalid
+        }
+    }
+
+    /**
      * Get the bot instance for use in other services.
      * Grammy is used as an outbound API client only — no bot.on() listeners.
      */
@@ -32,11 +51,14 @@ export class ReplySenderService {
     }
 
     /**
-     * Get the bot's own user ID for reply detection.
+     * Get the bot's own user ID. Eagerly resolved at init.
+     * Throws if called before init somehow.
      */
-    async getBotId(): Promise<number> {
-        const me = await this.bot.api.getMe();
-        return me.id;
+    getBotId(): number {
+        if (this.botId === null) {
+            throw new Error('Bot ID not initialized');
+        }
+        return this.botId;
     }
 
     /**

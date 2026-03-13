@@ -26,9 +26,9 @@ const envSchema = z.object({
     UPSTASH_REDIS_REST_URL: z.string().url().min(1, 'UPSTASH_REDIS_REST_URL is required'),
     UPSTASH_REDIS_TOKEN: z.string().min(1, 'UPSTASH_REDIS_TOKEN is required'),
 
-    // Qdrant Cloud
-    QDRANT_URL: z.string().min(1, 'QDRANT_URL is required'),
-    QDRANT_API_KEY: z.string().min(1, 'QDRANT_API_KEY is required'),
+    // Qdrant Cloud (Phase 2+)
+    QDRANT_URL: z.string().optional(),
+    QDRANT_API_KEY: z.string().optional(),
     QDRANT_COLLECTION: z.string().default('elena-memory'),
 
     // Gemini

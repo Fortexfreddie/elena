@@ -54,7 +54,9 @@ export function parseMessage(
     return {
         userId,
         chatId,
-        text: media.oversizeNote ? media.oversizeNote : text,
+        text: media.oversizeNote
+            ? (text ? `${text}\n\n${media.oversizeNote}` : media.oversizeNote)
+            : text,
         telegramDate,
         updateId,
         replyToBot,

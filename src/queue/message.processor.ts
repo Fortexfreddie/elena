@@ -57,6 +57,7 @@ export class MessageProcessor extends WorkerHost {
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unknown processor error';
             this.logger.error(`Processor stage failed: ${message}`);
+            throw error; // Let BullMQ mark as failed and trigger retry logic
         }
 
         const elapsed = Date.now() - startTime;

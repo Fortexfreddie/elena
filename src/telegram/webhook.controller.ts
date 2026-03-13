@@ -13,7 +13,7 @@ import { ReactionSenderService } from './reaction.sender.js';
 import { ReplySenderService } from './reply.sender.js';
 import { QueueService } from '../queue/queue.service.js';
 import type { TelegramUpdate } from '@app/common/types/telegram.types';
-import { Redis } from '@upstash/redis';
+import { UpstashRedisService } from '@app/common';
 
 /**
  * Webhook controller for incoming Telegram updates.
@@ -34,28 +34,14 @@ import { Redis } from '@upstash/redis';
 @Controller()
 export class WebhookController {
     private readonly logger = new Logger(WebhookController.name);
-    private readonly redis: Redis;
     private botId: number | null = null;
 
     constructor(
         private readonly reactionSender: ReactionSenderService,
         private readonly replySender: ReplySenderService,
         private readonly queueService: QueueService,
-    ) {
-        const redisUrl = process.env['UPSTASH_REDIS_REST_URL'];
-        const redisToken = process.env['UPSTASH_REDIS_TOKEN'];
-
-        if (!redisUrl || !redisToken) {
-            throw new Error(
-                'UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_TOKEN are required',
-            );
-        }
-
-        this.redis = new Redis({
-            url: redisUrl,
-            token: redisToken,
-        });
-    }
+        private readonly redisService: UpstashRedisService,
+    ) {}
 
     @Post('/webhook')
     @UseGuards(TelegramSecretGuard)
@@ -67,7 +53,7 @@ export class WebhookController {
 
         // Step 0: Atomic update_id idempotency gate
         // SETNX with TTL in a single command — no race condition
-        const isNew = await this.redis.set(`update:${String(updateId)}`, '1', {
+        const isNew = await this.redisService.client.set(`update:${String(updateId)}`, '1', {
             nx: true,
             ex: 3600,
         });
@@ -97,9 +83,9 @@ export class WebhookController {
                 }
             }
 
-            // Resolve bot ID (cached after first call)
+            // Retrieve eagerly-resolved bot ID
             if (this.botId === null) {
-                this.botId = await this.replySender.getBotId();
+                this.botId = this.replySender.getBotId();
             }
 
             // Step 2: Parse the update
@@ -131,7 +117,7 @@ export class WebhookController {
             return { ok: true };
         } catch (error: unknown) {
             // Release the update_id lock so Telegram's retry can get through
-            await this.redis.del(`update:${String(updateId)}`);
+            await this.redisService.client.del(`update:${String(updateId)}`);
 
             const message =
                 error instanceof Error ? error.message : 'Unknown webhook error';
