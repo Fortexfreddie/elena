@@ -5,6 +5,7 @@ import { MessageProcessor } from './message.processor.js';
 import { QUEUE_NAMES } from './job.types.js';
 import { AgentsModule } from '../agents/agents.module.js';
 import { TelegramModule } from '../telegram/telegram.module.js';
+import { MemoryModule } from '../memory/index.js';
 import { forwardRef } from '@nestjs/common';
 
 /**
@@ -20,6 +21,13 @@ import { forwardRef } from '@nestjs/common';
  *   commandTimeout: 30000    — don't hang on dead sockets
  *   keepAlive: 10000         — detect dead connections via TCP keepalive
  */
+const providers: any[] = [QueueService];
+
+// Only enable the consumer logic if this is the worker process
+if (process.env['PROCESS_TYPE'] === 'worker') {
+    providers.push(MessageProcessor);
+}
+
 @Module({
     imports: [
         BullModule.registerQueue(
@@ -28,9 +36,10 @@ import { forwardRef } from '@nestjs/common';
             { name: QUEUE_NAMES.SCHEDULED },
         ),
         AgentsModule,
+        MemoryModule,
         forwardRef(() => TelegramModule),
     ],
-    providers: [QueueService, MessageProcessor],
+    providers,
     exports: [QueueService],
 })
 export class QueueModule { }

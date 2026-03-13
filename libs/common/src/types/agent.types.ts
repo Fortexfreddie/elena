@@ -1,4 +1,5 @@
 import type { ParsedMessage } from './telegram.types.js';
+import type { FunctionCall } from '@google/genai';
 
 /**
  * Context passed to agents after memory assembly + persona injection.
@@ -87,6 +88,8 @@ export interface AgentResponse {
     confidence: number;
     /** Tools that were called during this run */
     toolsCalled: string[];
+    /** Raw function call objects returned by Gemini */
+    functionCalls?: FunctionCall[];
 }
 
 /**

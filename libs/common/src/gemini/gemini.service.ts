@@ -61,10 +61,10 @@ export class GeminiService {
             const errorMessage =
                 error instanceof Error ? error.message : 'Unknown Gemini API error';
 
-            // Retry with FALLBACK model on 429 (rate limit) or 500 (server error)
+            // Retry with FALLBACK model on 429 (rate limit), 500 (server error), or 503 (high demand)
             if (
-                model === GEMINI_MODELS.PRO &&
-                (statusCode === 429 || statusCode === 500)
+                (model === GEMINI_MODELS.PRO || model === GEMINI_MODELS.FLASH) &&
+                (statusCode === 429 || statusCode === 500 || statusCode === 503)
             ) {
                 this.logger.warn(
                     `${model} returned ${String(statusCode)}, retrying with ${GEMINI_MODELS.FALLBACK}`,

@@ -2,11 +2,11 @@ export const GEMINI_MODELS = {
     /** Lite model for routing/filtering — cheapest, fastest, free tier */
     FILTER: 'gemini-3.1-flash-lite-preview',
     /** Flash model for general tasks — fast, capable, free tier */
-    FLASH: 'gemini-3.1-flash-preview',
+    FLASH: 'gemini-3-flash-preview',
     /** Pro model for complex tasks — most capable, free tier */
-    PRO: 'gemini-2.5-pro',
-    /** Fallback model when PRO fails (429/500) */
-    FALLBACK: 'gemini-3.1-flash-preview',
+    PRO: 'gemini-3.1-pro-preview',
+    /** Fallback model when PRO/FLASH fails (429/500/503) */
+    FALLBACK: 'gemini-3.1-flash-lite-preview',
     /** Embedding model for Qdrant vectors */
     EMBEDDING: 'gemini-embedding-001',
 } as const;

@@ -35,7 +35,7 @@ export class FilterAgent {
         const messageText = parsed.text ?? '[media message]';
 
         const contextLines = hotMessages
-            .slice(-5)
+            .slice(-7) // Increased from 5 to 7 for better routing intelligence
             .map((m) => `${m.role}: ${m.text}`)
             .join('\n');
 
@@ -43,7 +43,9 @@ export class FilterAgent {
 You are NOT the responder — you only decide routing.
 
 Rules:
-- If the message is casual/simple (greetings, small talk, simple questions about yourself): action = "reply" and provide a warm, concise reply as Elena.
+- ONLY use action = "reply" if someone says "hi", "hello", "thank you" or basic pleasantries. Your reply must be brief.
+- FOR ALL OTHER MESSAGES (questions about yourself, Elena, identity, history, memory, context, reasoning, facts): action = "route" and routeTo = "manager".
+- DO NOT answer questions about identity or memory. Always route these to the manager.
 - If the message requires research, coding, bounty management, brainstorming, or task management: action = "route" and specify the sub-agent.
 - If the message is not directed at Elena or is irrelevant: action = "ignore".
 
@@ -54,6 +56,8 @@ You MUST respond by calling the route_decision function.`;
         const userMessage = contextLines
             ? `Recent context:\n${contextLines}\n\nNew message from user ${parsed.userId}:\n${messageText}`
             : `New message from user ${parsed.userId}:\n${messageText}`;
+
+        const startTime = Date.now();
 
         try {
             const response = await this.geminiService.generateContent(
@@ -114,6 +118,7 @@ You MUST respond by calling the route_decision function.`;
                 const call = response.functionCalls[0];
                 if (call.name === 'route_decision') {
                     const args = call.args;
+                    this.logger.log(`[FILTER_TRACE] Routing decision made in ${Date.now() - startTime}ms`);
                     return {
                         action: (args['action'] as string) as
                             | 'ignore'
@@ -132,18 +137,11 @@ You MUST respond by calling the route_decision function.`;
                 }
             }
 
-            // If model returned text instead of function call, treat as a direct reply
-            if (response.text) {
-                return {
-                    action: 'reply',
-                    reply: response.text,
-                    reason: 'Model returned text instead of function call',
-                };
-            }
-
+            // If model returned text instead of function call, or failed tool call
             return {
-                action: 'ignore',
-                reason: 'No actionable response from filter',
+                action: 'route',
+                routeTo: 'manager',
+                reason: 'Model failed to call route_decision — routing to manager as safe fallback.',
             };
         } catch (error: unknown) {
             if (error instanceof ModelError) {
