@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Bot } from 'grammy';
 import { autoRetry } from '@grammyjs/auto-retry';
-import { chunkMessage } from '@app/common/utils/chunk';
+import { chunkMessage, escapeHtml, escapeMarkdownV2 } from '@app/common';
 
 /**
  * Sends replies to Telegram group chats via Grammy.
@@ -63,32 +63,58 @@ export class ReplySenderService implements OnModuleInit {
 
     /**
      * Send a reply to a chat. Chunks long messages automatically.
+     * @param chatId Telegram chat ID
+     * @param text The message content
+     * @param replyToMessageId Optional ID to reply to
+     * @param parseMode Optional parse_mode. 'MarkdownV2' uses smart escaper.
      */
     async sendReply(
         chatId: string,
         text: string,
         replyToMessageId?: number,
+        parseMode: 'MarkdownV2' | 'HTML' | null = 'MarkdownV2',
+        escape: boolean = true,
     ): Promise<void> {
         const chunks = chunkMessage(text);
 
         for (let i = 0; i < chunks.length; i++) {
             try {
-                await this.bot.api.sendMessage(chatId, chunks[i], {
-                    parse_mode: 'Markdown',
+                let formattedChunk = chunks[i];
+
+                if (escape) {
+                    if (parseMode === 'MarkdownV2') {
+                        formattedChunk = escapeMarkdownV2(chunks[i]);
+                    } else if (parseMode === 'HTML') {
+                        formattedChunk = escapeHtml(chunks[i]);
+                    }
+                }
+
+                await this.bot.api.sendMessage(chatId, formattedChunk, {
+                    parse_mode: parseMode ?? undefined,
                     // Only reply to the original message on the first chunk
                     ...(i === 0 && replyToMessageId
                         ? { reply_parameters: { message_id: replyToMessageId } }
                         : {}),
                 });
             } catch (error: unknown) {
-                const message =
-                    error instanceof Error
-                        ? error.message
-                        : 'Unknown Telegram send error';
-                this.logger.error(
-                    `Failed to send reply chunk ${i + 1}/${chunks.length} to chat ${chatId}: ${message}`,
-                );
-                // Don't throw — best effort. If one chunk fails, try the rest.
+                // FALLBACK: if MarkdownV2 fails (often a 400 Bad Request due to unescaped chars)
+                // we try sending again as plain text without parse_mode.
+                try {
+                    this.logger.warn(`Failed to send reply chunk ${i + 1}/${chunks.length} with parse_mode=${parseMode}. Falling back to plain text.`);
+                    await this.bot.api.sendMessage(chatId, chunks[i], {
+                        ...(i === 0 && replyToMessageId
+                            ? { reply_parameters: { message_id: replyToMessageId } }
+                            : {}),
+                    });
+                } catch (fallbackError: unknown) {
+                    const message =
+                        fallbackError instanceof Error
+                            ? fallbackError.message
+                            : 'Unknown Telegram send error';
+                    this.logger.error(
+                        `Failed to send reply chunk ${i + 1}/${chunks.length} to chat ${chatId} (even with fallback): ${message}`,
+                    );
+                }
             }
         }
     }

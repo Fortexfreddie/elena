@@ -12,6 +12,7 @@ export interface MessageJob {
  * Job data for the elena-hitl BullMQ queue.
  */
 export interface HITLResumeJob {
+    action: 'confirm' | 'cancel';
     pendingActionKey: string;
     confirmedBy: string;
     jobId: string;

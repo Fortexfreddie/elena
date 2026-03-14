@@ -63,7 +63,7 @@ export interface TelegramMessage {
     caption?: string;
     caption_entities?: MessageEntity[]; 
     reply_to_message?: TelegramMessage;
-    forward_origin?: any; 
+    forward_origin?: unknown; 
     edit_date?: number; 
     media_group_id?: string; 
     has_protected_content?: boolean; 

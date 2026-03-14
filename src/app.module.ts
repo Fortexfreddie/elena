@@ -34,10 +34,15 @@ import { HealthController } from './health.controller';
       pinoHttp: {
         transport:
           process.env['NODE_ENV'] !== 'production'
-            ? { target: 'pino-pretty', options: { colorize: true } }
+            ? {
+              targets: [
+                { target: 'pino-pretty', options: { colorize: true }, level: 'debug' },
+                { target: 'pino/file', options: { destination: './error.log' }, level: 'info' }
+              ]
+            }
             : undefined,
         level: process.env['NODE_ENV'] !== 'production' ? 'debug' : 'info',
-        autoLogging: false, // Don't log every HTTP request — too noisy with Telegram webhooks
+        autoLogging: false,
       },
     }),
 

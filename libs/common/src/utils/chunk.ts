@@ -19,7 +19,10 @@ export function chunkMessage(
     text: string,
     maxLen: number = TELEGRAM_MAX_CHARS,
 ): string[] {
-    if (text.length <= maxLen) {
+    const REOPEN_PREFIX_MAX = 20; // Spare room for reopening markdown tags (```lang\n, etc)
+    const effectiveMax = maxLen - REOPEN_PREFIX_MAX;
+
+    if (text.length <= effectiveMax) {
         return [text];
     }
 
@@ -34,13 +37,13 @@ export function chunkMessage(
     };
 
     while (remaining.length > 0) {
-        if (remaining.length <= maxLen) {
+        if (remaining.length <= effectiveMax) {
             chunks.push(applyPrefix(remaining, state));
             break;
         }
 
-        const slice = remaining.slice(0, maxLen);
-        const splitIdx = findSplitPoint(slice, maxLen);
+        const slice = remaining.slice(0, effectiveMax);
+        const splitIdx = findSplitPoint(slice, effectiveMax);
         let chunk = remaining.slice(0, splitIdx);
         remaining = remaining.slice(splitIdx);
 

@@ -15,6 +15,7 @@ export { UpstashRedisModule } from './upstash-redis.module';
 
 // Utils
 export { chunkMessage } from './utils/chunk';
+export { escapeHtml, escapeMarkdownV2 } from './utils/escape';
 export { semanticChunk } from './utils/semantic-chunk';
 export { withRetry } from './utils/retry';
 export { sleep } from './utils/sleep';

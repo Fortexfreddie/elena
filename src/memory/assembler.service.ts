@@ -42,10 +42,20 @@ export class AssemblerService {
 
         // 4. Extract last 3 hot messages for semantic warm memory search
         let warmResults: WarmResult[] = [];
-        if (hotMessages.length > 0 && userProfile) {
-            const last3 = hotMessages.slice(-3).map(m => `${m.role}: ${m.text}`).join('\n');
-            if (last3.trim().length > 0) {
-                warmResults = await this.warmMemory.search(last3, userProfile.id);
+        if (hotMessages.length > 0) {
+            const query = hotMessages
+                .slice(-3)
+                .map(m => m.text ?? '')
+                .join(' ')
+                .replace(/`/g, '')        // strip backticks
+                .replace(/^\w+:\s*/gm, '') // strip role prefixes
+                .trim()
+                .slice(0, 300);
+
+            if (query.length >= 5) {
+                // MUST use telegramId — warm memory stores entries keyed by Telegram ID,
+                // not Prisma UUID. Using userProfile.id here would never match.
+                warmResults = await this.warmMemory.search(query, telegramId);
             }
         }
 

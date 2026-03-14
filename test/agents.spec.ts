@@ -135,7 +135,7 @@ describe('Hallucination Fixes (Unit)', () => {
 
       // Verify filter reply was saved/sent
       expect(mockReplySender.sendReply).toHaveBeenCalledWith('123', 'Direct Filter Reply', 1);
-      
+
       // CRITICAL: Verify manager was NEVER called
       expect(mockManagerAgent.execute).not.toHaveBeenCalled();
     });

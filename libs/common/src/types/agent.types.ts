@@ -1,5 +1,6 @@
 import type { ParsedMessage } from './telegram.types';
-import type { FunctionCall } from '@google/genai';
+import type { FunctionCall, Part } from '@google/genai';
+import { z } from 'zod';
 
 /**
  * Context passed to agents after memory assembly + persona injection.
@@ -12,17 +13,7 @@ export interface AgentContext {
     /** Set of decrypted secret plaintext values — fed to sanitizer Layer 1 */
     decryptedSecretsSet: Set<string>;
     /** Media content for multimodal processing (populated by worker if hasMedia) */
-    mediaContent?: MediaContent;
-}
-
-export interface MediaContent {
-    /** For files ≤10MB: inline base64-encoded data */
-    inlineData?: {
-        mimeType: string;
-        data: string;
-    };
-    /** For files >10MB: uploaded to Gemini File API */
-    fileUri?: string;
+    mediaContent?: Part;
 }
 
 /**
@@ -93,12 +84,26 @@ export interface AgentResponse {
 }
 
 /**
+ * Onboarding interview data saved by the agent.
+ */
+export const SaveInterviewArgsSchema = z.object({
+    displayName: z.string().min(1),
+    role: z.string().min(1),
+    technicalTone: z.string().min(1),
+    summary: z.string().min(1),
+});
+
+export type SaveInterviewArgs = z.infer<typeof SaveInterviewArgsSchema>;
+
+/**
  * Result from a tool execution.
  */
 export interface ToolResult {
     success: boolean;
     data?: unknown;
     error?: string;
+    suspended?: boolean; // NEW: Indicates execution is paused for HITL
+    terminateLoop?: boolean; // NEW: Signals agent to exit reasoning loop immediately
     truncated?: boolean;
     truncationNote?: string;
 }

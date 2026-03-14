@@ -5,23 +5,29 @@ import { BaseAgent } from './base.agent';
 import { GeminiService } from '@app/common/gemini/gemini.service';
 import { GEMINI_MODELS } from '@app/common/gemini/gemini.constants';
 import type { AgentContext, AgentResponse } from '@app/common/types/agent.types';
+import { ExecutorService } from '../tools/executor.service';
+import { PersonasInjector } from './personas.injector';
 import { CoderAgent } from './coder.agent';
 import { ReviewerAgent } from './reviewer.agent';
 import { ResearcherAgent } from './researcher.agent';
 import { BrainstormAgent } from './brainstorm.agent';
 import { TaskAgent } from './task.agent';
+import { RegistryService } from '../tools/registry.service';
 
 @Injectable()
 export class ManagerAgent extends BaseAgent {
     constructor(
         geminiService: GeminiService,
+        executorService: ExecutorService,
         private readonly coderAgent: CoderAgent,
         private readonly reviewerAgent: ReviewerAgent,
         private readonly researcherAgent: ResearcherAgent,
         private readonly brainstormAgent: BrainstormAgent,
-        private readonly taskAgent: TaskAgent
+        private readonly taskAgent: TaskAgent,
+        private readonly registry: RegistryService,
+        personasInjector: PersonasInjector
     ) {
-        super('manager', GEMINI_MODELS.FLASH, geminiService);
+        super('manager', GEMINI_MODELS.FLASH, geminiService, executorService, personasInjector);
     }
 
     protected getRoleInstruction(): string {
@@ -31,27 +37,7 @@ If the user asks for multi-step technical reasoning, code generation, extensive 
     }
 
     protected getTools(): FunctionDeclaration[] {
-        return [
-            {
-                name: 'delegate_task',
-                description: 'Delegate a complex task to a specific specialist agent. Use this for coding, reviewing, researching, brainstorming, or task management.',
-                parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                        agent: {
-                            type: Type.STRING,
-                            description: 'The specialist agent to delegate to.',
-                            enum: ['coder', 'reviewer', 'researcher', 'brainstorm', 'task']
-                        },
-                        reason: {
-                            type: Type.STRING,
-                            description: 'Brief reason for delegation.'
-                        }
-                    },
-                    required: ['agent', 'reason']
-                }
-            }
-        ];
+        return this.registry.getToolDeclarations(['delegate_task']);
     }
 
     /**

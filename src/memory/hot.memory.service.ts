@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { UpstashRedisService } from '@app/common';
+import { UpstashRedisService, sleep } from '@app/common';
 import type { HotMemoryEntry } from '@app/common/types/agent.types';
 
 @Injectable()
@@ -16,8 +16,15 @@ export class HotMemoryService {
         try {
             const data = await this.redisService.client.get(`hot:${chatId}`);
             if (!data) return [];
-            const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-            return Array.isArray(parsed) ? parsed : [];
+            let parsed: unknown;
+            try {
+                parsed = typeof data === 'string' ? JSON.parse(data) : data;
+            } catch (err) {
+                this.logger.error(`Failed to parse hot memory JSON for ${chatId}: ${String(err)}`);
+                return [];
+            }
+            if (!Array.isArray(parsed)) return [];
+            return parsed as HotMemoryEntry[];
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to fetch hot memory for ${chatId}: ${msg}`);
@@ -43,8 +50,24 @@ export class HotMemoryService {
      * Convenience method to append a new message.
      */
     async addMessage(chatId: string, message: HotMemoryEntry): Promise<void> {
-        const history = await this.getHistory(chatId);
-        history.push(message);
-        await this.saveHistory(chatId, history);
+        const lockKey = `hot:lock:${chatId}`;
+        const acquired = await this.redisService.client.set(lockKey, '1', { nx: true, ex: 5 });
+        
+        if (!acquired) {
+            // wait 100ms and retry once
+            await sleep(100);
+            const retry = await this.redisService.client.set(lockKey, '1', { nx: true, ex: 5 });
+            if (!retry) {
+                this.logger.warn(`Hot memory lock contention on chat ${chatId} — writing anyway`);
+            }
+        }
+        
+        try {
+            const history = await this.getHistory(chatId);
+            history.push(message);
+            await this.saveHistory(chatId, history);
+        } finally {
+            await this.redisService.client.del(lockKey);
+        }
     }
 }

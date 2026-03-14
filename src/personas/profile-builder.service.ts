@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@app/database';
 import { OnboardingStatus, OnboardingSessionStatus } from '@prisma/client';
+import { SaveInterviewArgsSchema } from '@app/common/types/agent.types';
 
 @Injectable()
 export class ProfileBuilder {
@@ -22,13 +23,19 @@ export class ProfileBuilder {
                 throw new Error('Onboarding session not found or not in pending_approval state');
             }
 
-            const profileData = session.builtProfileJson as any;
+            const validation = SaveInterviewArgsSchema.safeParse(session.builtProfileJson);
+            if (!validation.success) {
+                this.logger.error(`Validation failed for session ${sessionId}: ${validation.error.message}`);
+                throw new Error('Stored profile data is invalid');
+            }
+
+            const profileData = validation.data;
 
             // Update user record: Promote to member and finalize profile
             await this.prisma.user.update({
                 where: { telegramId: session.telegramId },
                 data: {
-                    displayName: profileData.displayName || 'Newcomer',
+                    displayName: profileData.displayName,
                     onboardingStatus: OnboardingStatus.approved,
                     role: 'member', // Promote from guest
                     personaJson: {

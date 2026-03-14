@@ -7,7 +7,7 @@ import { AgentsModule } from '../agents/agents.module';
 import { TelegramModule } from '../telegram/telegram.module';
 
 @Module({
-    imports: [AgentsModule, forwardRef(() => TelegramModule)],
+    imports: [forwardRef(() => AgentsModule), forwardRef(() => TelegramModule)],
     providers: [
         OnboardingDetector,
         InterviewerService,

@@ -3,6 +3,9 @@ import { GeminiService } from '@app/common/gemini/gemini.service';
 import type { AgentContext, AgentResponse } from '@app/common/types/agent.types';
 import type { Content, FunctionDeclaration } from '@google/genai';
 import type { GeminiModel } from '@app/common/gemini/gemini.constants';
+import { ExecutorService } from '../tools/executor.service';
+import { PersonasInjector } from './personas.injector';
+import { MAX_TOOL_CALLS } from '@app/common/gemini/gemini.constants';
 
 export abstract class BaseAgent {
     protected readonly logger: Logger;
@@ -10,37 +13,24 @@ export abstract class BaseAgent {
     constructor(
         protected readonly name: string,
         protected readonly defaultModel: GeminiModel,
-        protected readonly geminiService: GeminiService
+        protected readonly geminiService: GeminiService,
+        protected readonly executorService: ExecutorService,
+        protected readonly personasInjector: PersonasInjector
     ) {
         this.logger = new Logger(name);
     }
 
-    /**
-     * Each sub-agent must provide its specific role instructions.
-     */
     protected abstract getRoleInstruction(): string;
 
-    /**
-     * Returns the array of function declarations this agent is allowed to use.
-     */
     protected getTools(): FunctionDeclaration[] {
         return [];
     }
 
-    /**
-     * Combines agent-specific instructions with the global system block.
-     */
     protected buildSystemInstruction(context: AgentContext): string {
-        const parts = [
-            this.getRoleInstruction(),
-            context.systemBlock, // Global persona, rules, bounties, warm results
-        ];
-        return parts.filter(Boolean).join('\n\n---\n\n');
+        // PersonasInjector handles the heavy lifting
+        return this.personasInjector.inject(context, this.getRoleInstruction());
     }
 
-    /**
-     * Maps the hot memory context into Gemini's Content[] format.
-     */
     protected formatHistory(context: AgentContext): Content[] {
         return context.assembledContext.hotMessages.map(msg => ({
             role: msg.role === 'user' ? 'user' : 'model',
@@ -48,64 +38,142 @@ export abstract class BaseAgent {
         }));
     }
 
-    /**
-     * The primary entry point for executing an agent's logic.
-     * Future phase will add the tool execution loop here.
-     */
     async run(context: AgentContext): Promise<AgentResponse> {
         const startTime = Date.now();
         const systemInstruction = this.buildSystemInstruction(context);
         const history = this.formatHistory(context);
         const tools = this.getTools();
         const toolsCalled: string[] = [];
+        const collectedFunctionCalls: import('@google/genai').FunctionCall[] = [];
 
-        // Append the actual incoming message to the chat history
-        const userMessageParts: any[] = [{ text: context.parsedMessage.text ?? '' }];
-
-        if (context.mediaContent?.inlineData) {
-            userMessageParts.push({ inlineData: context.mediaContent.inlineData });
-        } else if (context.mediaContent?.fileUri) {
-            userMessageParts.push({
-                fileData: { 
-                    fileUri: context.mediaContent.fileUri, 
-                    mimeType: 'image/jpeg' // Simplified for now
-                }
-            });
+        const userMessageParts: Content['parts'] = [{ text: context.parsedMessage.text ?? '' }];
+        if (context.mediaContent) {
+            userMessageParts.push(context.mediaContent);
         }
-
         history.push({ role: 'user', parts: userMessageParts });
 
+        let iterations = 0;
+
         try {
-            const response = await this.geminiService.generateContent(
-                this.defaultModel,
-                history,
-                {
-                    systemInstruction,
-                    tools: tools.length > 0 ? [{ functionDeclarations: tools }] : undefined
+            while (iterations < MAX_TOOL_CALLS) {
+                iterations++;
+                const response = await this.geminiService.generateContent(
+                    this.defaultModel,
+                    history,
+                    {
+                        systemInstruction,
+                        tools: tools.length > 0 ? [{ functionDeclarations: tools }] : undefined
+                    }
+                );
+
+                history.push(response.rawContent);
+
+                if (!response.functionCalls || response.functionCalls.length === 0) {
+                    const latencyMs = Date.now() - startTime;
+                    this.logger.log(`[EXECUTION_TRACE] Agent '${this.name}' completed in ${latencyMs}ms using model '${response.model}'. Tools called: ${toolsCalled.length > 0 ? toolsCalled.join(', ') : 'None'}`);
+                    return {
+                        text: response.text,
+                        agentName: this.name,
+                        modelUsed: response.model,
+                        latencyMs,
+                        confidence: 90,
+                        toolsCalled,
+                        functionCalls: collectedFunctionCalls.length > 0 ? collectedFunctionCalls : undefined,
+                    };
                 }
-            );
 
-            // TODO-PHASE3: Implement tool calling executor loop here
-            if (response.functionCalls?.length) {
-                toolsCalled.push(...response.functionCalls.map(fc => fc.name));
+                const toolResponseParts: Content['parts'] = [];
+                let isSuspended = false;
+
+                // Loop-stuck detection: check if this call-set is identical to the one BEFORE the one we just pushed
+                const currentCallHash = JSON.stringify(response.functionCalls.map(c => ({ name: c.name, args: c.args })));
+                const modelTurns = history.filter(h => h.role === 'model');
+                const prevModelTurn = modelTurns.length > 1 ? modelTurns[modelTurns.length - 2] : null;
+                const prevCallHash = prevModelTurn?.parts 
+                    ? prevModelTurn.parts
+                        .filter(p => p.functionCall && p.functionCall.name)
+                        .map(p => ({ 
+                            name: p.functionCall?.name, 
+                            args: p.functionCall?.args 
+                        }))
+                    : null;
+                
+                if (prevCallHash && prevCallHash.length > 0 && JSON.stringify(prevCallHash) === currentCallHash) {
+                    this.logger.warn(`Stuck loop detected in ${this.name}: duplicate tool calls.`);
+                    const latencyMs = Date.now() - startTime;
+                    return {
+                        text: `I'm noticing I'm repeating the same tool calls without progress. Stopping here. Gathered: ${toolsCalled.join(', ')}`,
+                        agentName: this.name,
+                        modelUsed: response.model,
+                        latencyMs,
+                        confidence: 40,
+                        toolsCalled,
+                        functionCalls: collectedFunctionCalls.length > 0 ? collectedFunctionCalls : undefined,
+                    };
+                }
+
+                for (const call of response.functionCalls) {
+                    this.logger.log(`Executing tool: ${call.name}`);
+                    toolsCalled.push(call.name);
+                    collectedFunctionCalls.push(call as import('@google/genai').FunctionCall);
+                    const result = await this.executorService.executeCall(call, context);
+                    
+                    if (result.suspended) {
+                        isSuspended = true;
+                        this.logger.log(`Tool loop suspended by ${call.name}`);
+                    }
+
+                    if (result.terminateLoop) {
+                        this.logger.log(`Tool loop terminated by ${call.name}`);
+                        return {
+                            text: response.text || 'Task delegated or terminal action taken.',
+                            agentName: this.name,
+                            modelUsed: response.model,
+                            latencyMs: Date.now() - startTime,
+                            confidence: 100,
+                            toolsCalled,
+                            functionCalls: collectedFunctionCalls.length > 0 ? collectedFunctionCalls : undefined,
+                        };
+                    }
+
+                    toolResponseParts.push({
+                        functionResponse: {
+                            name: call.name,
+                            response: { result }
+                        }
+                    });
+                }
+                history.push({ role: 'user', parts: toolResponseParts });
+
+                if (isSuspended) {
+                    const latencyMs = Date.now() - startTime;
+                    return {
+                        text: response.text ?? 'Action suspended awaiting confirmation.',
+                        agentName: this.name,
+                        modelUsed: response.model,
+                        latencyMs,
+                        confidence: 100,
+                        toolsCalled,
+                        functionCalls: collectedFunctionCalls.length > 0 ? collectedFunctionCalls : undefined,
+                    };
+                }
             }
-
-            const latencyMs = Date.now() - startTime;
             
-            this.logger.log(`[EXECUTION_TRACE] Agent '${this.name}' completed in ${latencyMs}ms using model '${this.defaultModel}'. Tools called: ${toolsCalled.length > 0 ? toolsCalled.join(', ') : 'None'}`);
-
+            // Fallback for reaching max iterations
+            const latencyMs = Date.now() - startTime;
+            this.logger.warn(`Agent [${this.name}] reached max iterations (${MAX_TOOL_CALLS}).`);
+            
             return {
-                text: response.text ?? '',
+                text: `The task reached the maximum execution limit (${MAX_TOOL_CALLS} steps). I've gathered some information but need to stop here to avoid a loop. Please let me know if you'd like me to continue or try a different approach.`,
                 agentName: this.name,
                 modelUsed: this.defaultModel,
                 latencyMs,
-                confidence: 90, // To be implemented later
+                confidence: 50,
                 toolsCalled,
-                functionCalls: response.functionCalls
+                functionCalls: collectedFunctionCalls.length > 0 ? collectedFunctionCalls : undefined,
             };
         } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Execution failed for ${this.name}: ${msg}`);
+            this.logger.error(`Execution failed for ${this.name}: ${error}`);
             throw error;
         }
     }

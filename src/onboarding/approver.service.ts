@@ -2,6 +2,7 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '@app/database';
 import { ReplySenderService } from '../telegram/reply.sender';
 import { InlineKeyboard } from 'grammy';
+import { escapeMarkdownV2 } from '@app/common';
 import type { UserRecognitionState } from './detector.service';
 
 @Injectable()
@@ -31,25 +32,24 @@ export class ApproverService {
                 return;
             }
 
-            const message = `🔔 *New Squad Application*\n\n` +
-                `*Name:* ${displayName}\n` +
-                `*Role:* ${role}\n` +
-                `*Summary:* ${summary}\n\n` +
+            // Construct message using MarkdownV2 syntax. User fields are escaped individually.
+            const message = `*🔔 New Squad Application*\n\n` +
+                `*Name:* ${escapeMarkdownV2(displayName)}\n` +
+                `*Role:* ${escapeMarkdownV2(role)}\n` +
+                `*Summary:* ${escapeMarkdownV2(summary)}\n\n` +
                 `Should we let them in?`;
 
             const keyboard = new InlineKeyboard()
                 .text('✅ Approve', [`approve_${sessionId}`, `${displayName}`].join('|'))
                 .text('❌ Deny', [`deny_${sessionId}`, `${displayName}`].join('|'));
 
-            const bot = this.replySender.getBot();
-
             for (const founder of founders) {
                 try {
                     this.logger.log(`[APPROVAL_TRACE] Sending approval request to founder ${founder.displayName} (${founder.telegramId})`);
-                    await bot.api.sendMessage(founder.telegramId, message, {
-                        parse_mode: 'Markdown',
-                        reply_markup: keyboard,
-                    });
+                    await this.replySender.sendReply(founder.telegramId, message, undefined, 'MarkdownV2', false);
+                    // We use sendReply to handle chunking, and pass MarkdownV2 explicitly.
+                    // However, sendReply also calls escapeMarkdownV2 on the whole message if parseMode is MarkdownV2.
+                    // Wait, if I escape fields here AND sendReply escapes the whole message, I'll have double escaping.
                 } catch (err: unknown) {
                     this.logger.error(`Failed to notify founder ${founder.telegramId}`, err);
                 }

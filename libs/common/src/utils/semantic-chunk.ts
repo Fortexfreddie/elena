@@ -2,6 +2,8 @@
  * Splits text into chunks by word count for embedding token limit safety.
  * gemini-embedding-001 hard limit = 2048 tokens ≈ 1500 words.
  * Used by summarize.handler.ts before embedding calls.
+ * 
+ * TODO: Used by scheduled/summarize.handler.ts — implement in Phase 5
  */
 export function semanticChunk(text: string, maxWords: number): string[] {
     const words = text.split(/\s+/).filter((w) => w.length > 0);

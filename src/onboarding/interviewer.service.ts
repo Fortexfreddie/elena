@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '@app/database';
 import { OnboardingAgent } from '../agents/onboarding.agent';
 import { ApproverService } from './approver.service';
 import { OnboardingSessionStatus } from '@prisma/client';
-import type { AgentContext } from '@app/common/types/agent.types';
+import type { AgentContext, SaveInterviewArgs } from '@app/common/types/agent.types';
+import { SaveInterviewArgsSchema } from '@app/common/types/agent.types';
 import type { ParsedMessage } from '@app/common/types/telegram.types';
 
 import { UpstashRedisService } from '@app/common';
@@ -14,6 +15,7 @@ export class InterviewerService {
 
     constructor(
         private readonly prisma: PrismaService,
+        @Inject(forwardRef(() => OnboardingAgent))
         private readonly onboardingAgent: OnboardingAgent,
         private readonly approver: ApproverService,
         private readonly redis: UpstashRedisService,
@@ -30,7 +32,7 @@ export class InterviewerService {
         // 1. Acquire distributed lock (5-second safety window)
         const lockAcquired = await this.redis.client.set(lockKey, 'locked', {
             nx: true,
-            ex: 5,
+            ex: 60,
         });
 
         if (!lockAcquired) {
@@ -59,18 +61,24 @@ export class InterviewerService {
         // Phase 3 Fix: Ensure User record exists early so they show up in Prisma Studio
         // and we can track their progress even if they drop off mid-interview.
         const from = parsedMessage.rawUpdate.message?.from;
-        await this.prisma.user.upsert({
-            where: { telegramId: userId },
-            update: {
-                username: from?.username || null,
-            },
-            create: {
-                telegramId: userId,
-                displayName: from?.first_name || 'Newcomer',
-                username: from?.username || null,
-                onboardingStatus: 'pending',
-            },
-        });
+        const currentUser = await this.prisma.user.findUnique({ where: { telegramId: userId } });
+        
+        if (currentUser?.onboardingStatus === 'approved') {
+            this.logger.log(`[ONBOARDING_TRACE] User ${userId} is already approved. Skipping status re-init.`);
+        } else {
+            await this.prisma.user.upsert({
+                where: { telegramId: userId },
+                update: {
+                    username: from?.username || null,
+                },
+                create: {
+                    telegramId: userId,
+                    displayName: from?.first_name || 'Newcomer',
+                    username: from?.username || null,
+                    onboardingStatus: 'pending',
+                },
+            });
+        }
 
         // 2. Build context for the agent
         const history = session.conversationJson as any[];
@@ -110,17 +118,28 @@ Be warm and professional. Once you have their Name, Role, and Technical Tone, us
 
         if (saveInterviewCall) {
             this.logger.log(`[ONBOARDING_TRACE] User ${userId}: Agent triggered 'save_interview'. Data: ${JSON.stringify(saveInterviewCall.args)}`);
+            
+            // Validate data with Zod before proceeding
+            const validation = SaveInterviewArgsSchema.safeParse(saveInterviewCall.args);
+            if (!validation.success) {
+                this.logger.error(`[ONBOARDING_TRACE] User ${userId}: Invalid interview data from model: ${validation.error.message}`);
+                // Fallback: we could either return an error or try a graceful degradation.
+                // Given the instructions, we'll return a simple response to the user.
+                return "I'm having a little trouble processing your details. Could you try telling me your name and role again?";
+            }
+
+            const interviewData = validation.data;
+
             await this.prisma.onboardingSession.update({
                 where: { id: session.id },
                 data: {
                     status: OnboardingSessionStatus.pending_approval,
-                    builtProfileJson: saveInterviewCall.args as any,
+                    builtProfileJson: interviewData as any, // Database field is JSON
                     conversationJson: updatedHistory,
                 },
             });
 
             // Notify founders
-            const interviewData = saveInterviewCall.args as any;
             await this.approver.notifyFounders(
                 session.id,
                 interviewData.displayName,
@@ -134,7 +153,7 @@ Be warm and professional. Once you have their Name, Role, and Technical Tone, us
                 update: { onboardingStatus: 'pending' },
                 create: {
                     telegramId: userId,
-                    displayName: (saveInterviewCall.args as any).displayName || 'Newcomer',
+                    displayName: interviewData.displayName,
                     onboardingStatus: 'pending',
                 }
             });

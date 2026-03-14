@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { sleep } from '../utils/sleep';
 import {
     GoogleGenAI,
     type GenerateContentResponse as SDKGenerateContentResponse,
@@ -8,6 +9,7 @@ import {
 } from '@google/genai';
 import { ModelError } from '../types/errors';
 import { GEMINI_MODELS, EMBEDDING_DIMENSIONS, type GeminiModel } from './gemini.constants';
+import { HarmCategory, HarmBlockThreshold } from '@google/genai';
 
 /**
  * Single wrapper around @google/genai SDK.
@@ -40,57 +42,75 @@ export class GeminiService {
      * - systemInstruction carries persona + rules + context (NOT in messages[])
      */
     async generateContent(
-        model: GeminiModel,
+        requestedModel: GeminiModel,
         contents: Content[],
         config: GenerateContentConfig = {},
     ): Promise<ElenaGenerateContentResponse> {
-        try {
-            const response = await this.ai.models.generateContent({
-                model,
-                contents,
-                config,
-            });
+        // Define fallback tiers for maximum reliability
+        // Tier 1 (Target) -> Tier 2 (Flash) -> Tier 3 (Flash Lite)
+        const chain: GeminiModel[] = [requestedModel];
 
-            return this.parseResponse(response, model);
-        } catch (error: unknown) {
-            if (error instanceof ModelError) {
-                throw error;
+        if (requestedModel === GEMINI_MODELS.PRO) {
+            chain.push(GEMINI_MODELS.FALLBACK);      // Flash
+            chain.push(GEMINI_MODELS.FALLBACK_LITE); // Flash Lite
+        } else if (requestedModel === GEMINI_MODELS.FLASH || requestedModel === GEMINI_MODELS.FILTER) {
+            // Already mid-tier, only one safety net left
+            if (requestedModel !== GEMINI_MODELS.FALLBACK_LITE) {
+                chain.push(GEMINI_MODELS.FALLBACK_LITE);
             }
-
-            const statusCode = extractStatusCode(error);
-            const errorMessage =
-                error instanceof Error ? error.message : 'Unknown Gemini API error';
-
-            // Retry with FALLBACK model on 429 (rate limit), 500 (server error), or 503 (high demand)
-            if (
-                (model === GEMINI_MODELS.PRO || model === GEMINI_MODELS.FLASH || model === GEMINI_MODELS.FILTER) &&
-                (statusCode === 429 || statusCode === 500 || statusCode === 503)
-            ) {
-                this.logger.warn(
-                    `${model} returned ${String(statusCode)}, retrying with ${GEMINI_MODELS.FALLBACK}`,
-                );
-
-                try {
-                    const fallbackResponse = await this.ai.models.generateContent({
-                        model: GEMINI_MODELS.FALLBACK,
-                        contents,
-                        config,
-                    });
-
-                    return this.parseResponse(fallbackResponse, GEMINI_MODELS.FALLBACK);
-                } catch (fallbackError: unknown) {
-                    const fbMessage =
-                        fallbackError instanceof Error
-                            ? fallbackError.message
-                            : 'Unknown fallback error';
-                    throw new ModelError(
-                        `Both ${model} and fallback ${GEMINI_MODELS.FALLBACK} failed: ${fbMessage}`,
-                    );
-                }
-            }
-
-            throw new ModelError(`${model} failed: ${errorMessage}`);
         }
+
+        // De-duplicate in case constants overlap
+        const modelChain = Array.from(new Set(chain));
+        let lastError: unknown;
+
+        for (let i = 0; i < modelChain.length; i++) {
+            const currentModel = modelChain[i];
+            const isLast = i === modelChain.length - 1;
+
+            try {
+                const response = await this.ai.models.generateContent({
+                    model: currentModel,
+                    contents,
+                    config: {
+                        ...config,
+                        safetySettings: [
+                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+                        ],
+                    },
+                });
+
+                return this.parseResponse(response, currentModel);
+            } catch (error: unknown) {
+                lastError = error;
+                
+                // If it's a structural error (not transient), don't bother retrying
+                if (error instanceof ModelError) throw error;
+
+                const statusCode = extractStatusCode(error);
+                const isTransient = statusCode === 429 || statusCode === 500 || statusCode === 503;
+
+                if (isTransient && !isLast) {
+                    const nextModel = modelChain[i + 1];
+                    this.logger.warn(
+                        `Tier ${i + 1} (${currentModel}) failed with ${statusCode}. Retrying with Tier ${i + 2} (${nextModel})...`
+                    );
+
+                    const waitSec = this.extractRetryAfter(error);
+                    if (waitSec > 0) await sleep(waitSec * 1000);
+                    continue;
+                }
+
+                // If not transient or it's our last hope, exit the loop
+                break;
+            }
+        }
+
+        const finalError = lastError instanceof Error ? lastError.message : String(lastError);
+        throw new ModelError(`Multi-tier fallback failed. Final model tried: ${modelChain[modelChain.length - 1]}. Error: ${finalError}`);
     }
 
     /**
@@ -123,8 +143,17 @@ export class GeminiService {
             }
         }
 
+        // Extract text parts manually to avoid SDK warning on multi-part responses
+        let extractedText = '';
+        if (response.candidates[0].content.parts) {
+            extractedText = response.candidates[0].content.parts
+                .filter(p => 'text' in p && p.text)
+                .map(p => p.text)
+                .join('\n');
+        }
+
         return {
-            text: response.text ?? '',
+            text: extractedText,
             rawContent: response.candidates[0].content,
             functionCalls: functionCalls.length > 0 ? functionCalls : undefined,
             model,
@@ -212,6 +241,13 @@ export class GeminiService {
                 error instanceof Error ? error.message : 'Unknown delete error';
             this.logger.warn(`Failed to delete Gemini file ${name}: ${message}`);
         }
+    }
+    private extractRetryAfter(error: unknown): number {
+        if (error instanceof Error) {
+            const match = error.message.match(/retry after (\d+)/i);
+            if (match?.[1]) return parseInt(match[1], 10);
+        }
+        return 2; // default 2 second wait if no header found
     }
 }
 

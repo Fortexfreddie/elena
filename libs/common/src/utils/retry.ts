@@ -21,6 +21,8 @@ const DEFAULT_OPTIONS: RetryOptions = {
  * Exponential backoff wrapper for external API calls.
  * Retries on failure with increasing delays.
  *
+ * TODO: Wire into external API calls (web_search, github_fetch) in Phase 5 for resilience
+ * 
  * @throws The last error if all attempts fail
  */
 export async function withRetry<T>(

@@ -1,6 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, OnModuleInit } from '@nestjs/common';
 import type { AgentTool } from './base.tool';
-import { CustomSearchTool } from './custom-search.tool';
+import { GithubFetchTool } from './github-fetch.tool';
+import { MemorySearchTool } from './memory-search.tool';
+import { DocScraperTool } from './doc-scraper.tool';
+import { BountyUpdateTool } from './bounty-update.tool';
+import { SendDmTool } from './send-dm.tool';
+import { SendReminderTool } from './send-reminder.tool';
+import { DraftMessageTool } from './draft-message.tool';
+import { RunCodeTool } from './run-code.tool';
+import { WebSearchTool } from './web-search.tool';
+import { LogMonitorTool } from './log-monitor.tool';
+import { DelegateTaskTool } from './delegate-task.tool';
 import type { FunctionDeclaration } from '@google/genai';
 
 /**
@@ -9,20 +19,49 @@ import type { FunctionDeclaration } from '@google/genai';
  * Agents can retrieve the function declarations from here to pass to Gemini.
  */
 @Injectable()
-export class RegistryService {
+export class RegistryService implements OnModuleInit {
     private readonly logger = new Logger(RegistryService.name);
     private readonly toolsMap = new Map<string, AgentTool>();
 
     constructor(
-        private readonly customSearchTool: CustomSearchTool,
-        // As we add more tools, inject them here:
-        // private readonly githubTool: GithubTool,
-        // private readonly bountyTool: BountyTool,
-    ) {
-        this.registerTool(this.customSearchTool);
+        private readonly githubFetchTool: GithubFetchTool,
+        private readonly memorySearchTool: MemorySearchTool,
+        private readonly docScraperTool: DocScraperTool,
+        private readonly bountyUpdateTool: BountyUpdateTool,
+        @Inject(forwardRef(() => SendDmTool))
+        private readonly sendDmTool: SendDmTool,
+        @Inject(forwardRef(() => SendReminderTool))
+        private readonly sendReminderTool: SendReminderTool,
+        private readonly draftMessageTool: DraftMessageTool,
+        private readonly runCodeTool: RunCodeTool,
+        private readonly webSearchTool: WebSearchTool,
+        private readonly logMonitorTool: LogMonitorTool,
+        private readonly delegateTaskTool: DelegateTaskTool,
+    ) { }
+
+    onModuleInit() {
+        this.registerTool(this.githubFetchTool);
+        this.registerTool(this.memorySearchTool);
+        this.registerTool(this.docScraperTool);
+        this.registerTool(this.bountyUpdateTool);
+        this.registerTool(this.sendDmTool);
+        this.registerTool(this.sendReminderTool);
+        this.registerTool(this.draftMessageTool);
+        this.registerTool(this.runCodeTool);
+        this.registerTool(this.webSearchTool);
+        this.registerTool(this.logMonitorTool);
+        this.registerTool(this.delegateTaskTool);
     }
 
     private registerTool(tool: AgentTool): void {
+        if (!tool) {
+            this.logger.warn('Attempted to register a null or undefined tool');
+            return;
+        }
+        if (!tool.name) {
+            this.logger.warn(`Tool of type ${tool.constructor.name} has no name defined`);
+            return;
+        }
         if (this.toolsMap.has(tool.name)) {
             this.logger.warn(`Tool ${tool.name} is already registered! Overwriting.`);
         }
@@ -31,10 +70,15 @@ export class RegistryService {
     }
 
     /**
-     * Get the Gemini FunctionDeclaration object for all registered tools.
+     * Get the Gemini FunctionDeclaration object for registered tools.
+     * @param allowedTools Optional array of tool names to filter by.
      */
-    getToolDeclarations(): FunctionDeclaration[] {
-        return Array.from(this.toolsMap.values()).map(t => t.getDeclaration());
+    getToolDeclarations(allowedTools?: string[]): FunctionDeclaration[] {
+        let tools = Array.from(this.toolsMap.values());
+        if (allowedTools && allowedTools.length > 0) {
+            tools = tools.filter(t => allowedTools.includes(t.name));
+        }
+        return tools.map(t => t.getDeclaration());
     }
 
     /**

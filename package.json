@@ -49,6 +49,7 @@
     "ioredis": "^5.10.0",
     "langfuse": "^3.38.6",
     "nestjs-pino": "^4.6.0",
+    "octokit": "^5.0.5",
     "pg": "^8.20.0",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",

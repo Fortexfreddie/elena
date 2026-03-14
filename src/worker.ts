@@ -26,7 +26,12 @@ import { AgentsModule } from './agents/agents.module';
             pinoHttp: {
                 transport:
                     process.env['NODE_ENV'] !== 'production'
-                        ? { target: 'pino-pretty', options: { colorize: true } }
+                        ? {
+                            targets: [
+                                { target: 'pino-pretty', options: { colorize: true }, level: 'debug' },
+                                { target: 'pino/file', options: { destination: './error.log' }, level: 'info' }
+                            ]
+                        }
                         : undefined,
                 level: process.env['NODE_ENV'] !== 'production' ? 'debug' : 'info',
             },

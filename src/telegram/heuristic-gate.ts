@@ -25,10 +25,11 @@ export function shouldProcess(parsed: ParsedMessage): boolean {
         return true;
     }
 
-    // No text means media-only message in group with no mention — skip
+    // No text means media-only message.
+    // In Phase 3.14, we allow silent media in groups to reach the FilterAgent.
     const text = parsed.text;
     if (!text) {
-        return false;
+        return parsed.hasMedia; // Pass if it has an image/voice, otherwise skip
     }
 
     const lower = text.toLowerCase();
@@ -44,9 +45,12 @@ export function shouldProcess(parsed: ParsedMessage): boolean {
         return true;
     }
 
+    // Slash command check
+    if (lower.startsWith('/')) {
+        return true;
+    }
+
     // Everything else in a group chat → discard
-    // Note: /confirm_ and /cancel_ are handled by the controller BEFORE
-    // the gate runs, so they never reach this point.
     return false;
 }
 

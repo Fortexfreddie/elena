@@ -4,11 +4,19 @@ import type { FunctionDeclaration } from '@google/genai';
 import { BaseAgent } from './base.agent';
 import { GeminiService } from '@app/common/gemini/gemini.service';
 import { GEMINI_MODELS } from '@app/common/gemini/gemini.constants';
+import { ExecutorService } from '../tools/executor.service';
+import { RegistryService } from '../tools/registry.service';
+import { PersonasInjector } from './personas.injector';
 
 @Injectable()
 export class OnboardingAgent extends BaseAgent {
-    constructor(geminiService: GeminiService) {
-        super('onboarding', GEMINI_MODELS.FLASH, geminiService);
+    constructor(
+        geminiService: GeminiService,
+        executorService: ExecutorService,
+        private readonly registry: RegistryService,
+        personasInjector: PersonasInjector
+    ) {
+        super('onboarding', GEMINI_MODELS.FLASH, geminiService, executorService, personasInjector);
     }
 
     protected getRoleInstruction(): string {

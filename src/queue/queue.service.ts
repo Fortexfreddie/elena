@@ -18,7 +18,29 @@ export class QueueService {
         private readonly messagesQueue: Queue,
         @InjectQueue(QUEUE_NAMES.HITL)
         private readonly hitlQueue: Queue,
+        @InjectQueue(QUEUE_NAMES.SCHEDULED)
+        private readonly scheduledQueue: Queue,
     ) { }
+
+    /**
+     * Add a scheduled reminder job.
+     * @param reminderId The UUID of the reminder in Prisma
+     * @param delayMs Milliseconds to wait before firing
+     */
+    async addReminderJob(reminderId: string, delayMs: number): Promise<void> {
+        await this.scheduledQueue.add(
+            'reminder-delivery',
+            { reminderId },
+            {
+                delay: delayMs,
+                attempts: 5,
+                backoff: { type: 'exponential', delay: 5000 },
+                removeOnComplete: { count: 100 },
+                removeOnFail: { count: 50 },
+            }
+        );
+        this.logger.log(`Scheduled reminder ${reminderId} for +${delayMs}ms`);
+    }
 
     /**
      * Add a message job to the processing queue.
@@ -36,7 +58,9 @@ export class QueueService {
             {
                 attempts: 3,
                 backoff: { type: 'exponential', delay: 2000 },
-            },
+                removeOnComplete: { count: 100 },
+                removeOnFail: { count: 50 },
+            }
         );
 
         const jobId = job.id ?? 'unknown';
@@ -48,25 +72,53 @@ export class QueueService {
 
     /**
      * Add a HITL resume job when user confirms a pending action.
-     * No retries — idempotency is handled via Postgres updateMany.
      */
     async addHitlResumeJob(
         jobId: string,
         confirmedBy: string,
     ): Promise<void> {
         const jobData: HITLResumeJob = {
+            action: 'confirm',
             pendingActionKey: `hitl:${jobId}`,
             confirmedBy,
             jobId,
-            decryptedSecretsArray: [], // Will be rehydrated from Postgres
+            decryptedSecretsArray: [],
         };
 
         await this.hitlQueue.add('hitl-resume', jobData, {
             attempts: 1,
+            removeOnComplete: { count: 100 },
+            removeOnFail: { count: 50 },
         });
 
         this.logger.log(
-            `Added HITL resume job for ${jobId} confirmed by ${confirmedBy}`,
+            `Added HITL confirm job for ${jobId} by ${confirmedBy}`,
+        );
+    }
+
+    /**
+     * Add a HITL cancel job.
+     */
+    async addHitlCancelJob(
+        jobId: string,
+        cancelledBy: string,
+    ): Promise<void> {
+        const jobData: HITLResumeJob = {
+            action: 'cancel',
+            pendingActionKey: `hitl:${jobId}`,
+            confirmedBy: cancelledBy,
+            jobId,
+            decryptedSecretsArray: [],
+        };
+
+        await this.hitlQueue.add('hitl-resume', jobData, {
+            attempts: 1,
+            removeOnComplete: { count: 100 },
+            removeOnFail: { count: 50 },
+        });
+
+        this.logger.log(
+            `Added HITL cancel job for ${jobId} by ${cancelledBy}`,
         );
     }
 }

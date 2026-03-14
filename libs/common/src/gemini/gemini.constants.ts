@@ -5,8 +5,10 @@ export const GEMINI_MODELS = {
     FLASH: 'gemini-3-flash-preview',
     /** Pro model for complex tasks — most capable, free tier */
     PRO: 'gemini-3.1-pro-preview',
-    /** Fallback model when PRO/FLASH fails (429/500/503) */
-    FALLBACK: 'gemini-3.1-flash-lite-preview',
+    /** Primary fallback model when PRO fails */
+    FALLBACK: 'gemini-3-flash-preview',
+    /** Secondary fallback (Lite) when all else fails */
+    FALLBACK_LITE: 'gemini-3.1-flash-lite-preview',
     /** Embedding model for Qdrant vectors */
     EMBEDDING: 'gemini-embedding-001',
 } as const;

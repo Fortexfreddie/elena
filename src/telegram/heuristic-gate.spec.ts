@@ -15,6 +15,7 @@ describe('HeuristicGate', () => {
         mediaFileSize: null,
         mediaType: null,
         rawUpdate: {} as any,
+        replyToContext: null,
     };
 
     it('should pass if it is a DM', () => {
