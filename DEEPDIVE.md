@@ -1,128 +1,142 @@
-# Elena — Deep Dive: Technical Architecture & Core Systems
+# Elena - Deep Dive: Technical Architecture and Core Systems
 
-This document provides an extremely detailed technical breakdown of Elena's architecture, control flows, and core components. It is intended for senior engineers and architects onboarding onto the project.
-
----
-
-## 🏗️ System Architecture
-
-Elena is built as a **Modular Monolith** using NestJS. While it currently runs as a single repo, it is designed for future monorepo expansion (Phase 6+).
-
-### Core Philosophy
-1.  **Asynchronous by Design**: Webhooks are acknowledged immediately; all AI reasoning happens in background workers.
-2.  **Stateless Web Layer**: The web service holds no state, allowing for easy horizontal scaling.
-3.  **Tiered Memory**: Context is gathered from multiple sources (Redis, Qdrant, Postgres) to maximize reasoning accuracy and minimize hallucinations.
-4.  **Specialist Delegation**: A central "Manager" orchestrates specialized sub-agents, preventing a single model from becoming a "jack of all trades, master of none."
+This document provides a comprehensive technical analysis of Elena's internal architecture, control flows, and core logic. It is intended for senior technical personnel to understand the system's operational design and extensibility patterns.
 
 ---
 
-## 🧩 Core Components
+## System Architecture
 
-### 1. Agents System
-Agents are located in `src/agents/` and inherit from a common `BaseAgent`.
+Elena follows a multi-process asynchronous architecture designed to decouple input reception from heavy AI processing.
 
--   **Model**: Primarily uses **Gemini 1.5/3 Pro/Flash** via the `@google/genai` SDK.
--   **System Instruction**: The persona, rules, and assembled context are injected into the `systemInstruction` config of the Gemini call, rather than the message history, to preserve attention.
--   **Autonomous Loop**: The `BaseAgent` implements a `while` loop that allows for up to **5 tool calls** in a single turn. It automatically handles tool results and pushes them back into the context for the next iteration.
+### High-Level Architecture
+```mermaid
+graph TD
+    subgraph "Telegram API"
+        TG[Telegram Servers]
+    end
 
-#### Key Agents:
--   **ManagerAgent**: The entry point. Uses the `delegate_task` tool to call specialists.
--   **FilterAgent**: A low-cost router (Flash Lite) that decides if a message requires a reply or should be ignored.
--   **Coder/Reviewer Agents**: High-reasoning models (Pro) with GitHub and code execution tools.
--   **OnboardingAgent**: Specialized agent used during the interview flow to extract user data.
+    subgraph "Web Service (Entry Point)"
+        WC[Webhook Controller]
+        IG[Idempotency Gate - Redis]
+        HG[Heuristic Gate]
+        QS[Queue Service]
+    end
 
-### 2. Specialist Strategy
-Elena uses a **Specialist Squad** approach. Each specialist has a strict whitelist of tools they are permitted to use. This minimizes the risk of accidental or unintended tool execution.
+    subgraph "Message Broker"
+        BMQ[BullMQ - Redis]
+    end
 
--   **Manager**: `delegate_task`, `web_search`.
--   **Researcher**: `web_search`, `doc_scraper`, `memory_search`.
--   **Coder**: `github_fetch`, `run_code`, `log_monitor`.
+    subgraph "Worker Service (Brain)"
+        MP[Message Processor]
+        MA[Memory Assembler]
+        AO[Agent Orchestrator]
+        TE[Tool Executor]
+    end
 
-### 3. Tool Architecture
-Tools implement the `AgentTool` interface in `src/tools/base.tool.ts`.
+    subgraph "Data Layers"
+        RD[Redis - Hot Memory]
+        QD[Qdrant - Warm Memory]
+        PG[Postgres - Cold Memory]
+    end
 
--   **RegistryService**: Acts as the central hub for discovering and providing tool declarations (JSON Schema) to agents.
--   **ExecutorService**: The execution engine that validates Zod schemas, checks for HITL requirements, runs the tool logic, and handles data truncation (>15k chars).
+    TG -->|Webhook POST| WC
+    WC --> IG
+    IG --> HG
+    HG -->|Valid Task| QS
+    QS -->|Push Job| BMQ
+    BMQ -->|Consume Job| MP
+    MP --> MA
+    MA -->|Fetch Context| RD
+    MA -->|Fetch Vectors| QD
+    MA -->|Fetch Profile| PG
+    MP --> AO
+    AO -->|Request Tool| TE
+    TE -->|Execute| AO
+    AO -->|Final Response| TG
+```
 
----
-
-## 🔄 Execution Flow
-
-When a user sends a message, it flows through the following pipeline:
-
-1.  **WebhookController**: Receives the POST from Telegram.
-2.  **Idempotency Gate**: Checks Redis for the `update_id` to prevent double-processing.
-3.  **Heuristic Gate**: Quickly determines if Elena is tagged or mentioned.
-4.  **QueueService**: Pushes a `MessageJob` to BullMQ. **WEB REQUEST ENDS HERE (200 OK).**
-5.  **MessageProcessor (Worker)**:
-    -   **Context Enrichment**: Pulls reply-to context if applicable.
-    -   **Memory Assembler**: Fetches last 15 messages from Redis (Hot), relevant vectors from Qdrant (Warm), and user profile/bounties from Postgres (Cold).
-    -   **FilterAgent**: Determines if the message is an "Ignore", "Direct Reply", or "Route to Manager".
-    -   **ManagerAgent**: Orchestrates the multi-turn tool loop.
-6.  **ReplySender**: Chunks and sends the final response back via the Grammy API.
-7.  **Audit Service**: Logs the entire trace (latency, model, tools used) for observability.
-
----
-
-## 💾 Memory Hierarchy
-
-| Tier | Source | Purpose | Data Life |
-| :--- | :--- | :--- | :--- |
-| **Hot** | Upstash Redis | Recent chat context (sliding window of 15 messages). | 2 Hours |
-| **Warm** | Qdrant Cloud | Semantic search against all past interactions (RAG). | Persistent |
-| **Cold** | Postgres | Hard data: User profiles, personas, bounties, and secrets. | Persistent |
-
-**Warm Memory Query Logic**: Elena does not search with the raw incoming text. Instead, she concatenates the last 3 sorted hot messages to provide meaningful semantic "nouns" to the embedding model.
+### Core Logic Principles
+1. **Asynchronous Reasoning**: All LLM-based decision making is handled by background workers. The incoming webhook is acknowledged within 200ms to avoid Telegram retry storms.
+2. **Context-Rich Injections**: Instead of relying solely on chat history, Elena injects semantic RAG results and user profile metadata directly into the system instruction block.
+3. **Specialist Delegation**: The Manager agent acts as a router, utilizing specialized agents (Coder, Researcher, Reviewer, Brainstormer) with narrow toolsets to increase reliability.
 
 ---
 
-## 🔒 Security & Safety
+## Message Execution Pipeline
 
-### Human-in-the-Loop (HITL)
-For sensitive tool calls (e.g., `bounty_update` or `run_code`), the `ExecutorService`:
-1.  Suspends the agent loop.
-2.  Serializes the pending action to Postgres (`HitlPending` table) and Redis.
-3.  Sends a Telegram message with `Confirm/Cancel` buttons.
-4.  Upon user confirmation, a `HitlProcessor` resumes the specific tool call with the original context.
+The execution flow for a single user message follows a deterministic state transition:
 
-### Secret Management
-User-specific secrets (e.g., GitHub tokens) are never stored in plaintext. They are encrypted using **AES-256-GCM** with a fresh 12-byte IV for every record. Decryption only happens in memory immediately before a tool call.
-
-### Sanitization
-A two-layer sanitizer runs on every outgoing message:
-1.  **Exact Match**: Redacts any secrets known to be in the current context.
-2.  **Regex**: Redacts standard patterns like `sk-...` (OpenAI), `AIza...` (Google), and JWTs.
-
----
-
-## 🛠️ Extending the System
-
-### Adding a New Agent
-1.  Extend `BaseAgent`.
-2.  Set the `model` and `systemInstruction`.
-3.  Whitelisted tools are injected via constructor.
-4.  Register in `AgentsModule`.
-
-### Adding a New Strategy
-1.  Most strategies are implemented as specialized `Agent` prompts and tool whitelists.
-2.  Modify the `ManagerAgent` or `FilterAgent` prompts to recognize the new routing target.
-
-### Adding a New Tool
-1.  Implement `AgentTool` (see `src/tools/base.tool.ts`).
-2.  Define the `argsSchema` using Zod.
-3.  Write the `execute` logic.
-4.  Register in `RegistryService`.
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant W as Web Service
+    participant Q as Redis Queue
+    participant B as Worker (Brain)
+    participant M as Memory Services
+    participant L as LLM (Gemini)
+    
+    U->>W: Sends Message
+    W->>W: Validate / Deduplicate
+    W-->>U: Ack (200 OK)
+    W->>Q: Enqueue MessageJob
+    Q->>B: Dequeue Job
+    B->>M: Fetch Hot/Warm/Cold Context
+    M-->>B: Return Aggregated State
+    B->>L: Filter Agent (Keep/Ignore?)
+    L-->>B: Return Decision
+    
+    alt Decision == Keep
+        rect rgb(240, 240, 240)
+            B->>L: Manager Agent Reasoning Loop
+            L->>B: Request Tool Call
+            B->>B: Execute Tool Logic
+            B->>L: Return Tool Result
+        end
+        B->>U: Send Final Reply via Bot API
+    end
+```
 
 ---
 
-## 📈 Future Improvements & Limitations
+## Core Systems Analysis
 
-### Current Limitations
--   **Sequential Tooling**: Tools are executed one-by-one in the loop. Parallel tool merging is not yet implemented.
--   **No Cross-Cycle Memory**: Agents don't "remember" their reasoning from the previous cycle unless it was explicitly saved as a "Warm" memory.
--   **Synchronous RAG**: Embedding generation and vector search are part of the worker loop and can add latency.
+### 1. Agents and Orchestration
+Agents are implemented using the `BaseAgent` class, which manages context window constraints and the autonomous reasoning loop.
 
-### Planned Improvements
--   **Vision Grounding Enhancement**: Improved "pixel-truth" logic for complex diagrams.
--   **Multi-User Tools**: Collaborative tool usage where multiple users must confirm an action.
--   **Monorepo Split**: Moving specialists into their own micro-workers for better resource isolation.
+- **MANAGER_AGENT**: Coordinates overall strategy and specialist delegation.
+- **FILTER_AGENT**: Optimized for low-latency routing, utilizing technical keyword heuristics (Active Listening). Uses `gemini-3.1-flash-lite-preview`.
+- **ONBOARDING_AGENT**: Manages the multi-stage interview state machine for new users.
+- **CODER_SPECIALIST**: High-context agent with access to technical documentation and code analysis tools.
+
+### 2. Tiered Memory Management
+Context is segmented into three performance tiers:
+- **Hot Memory (Redis)**: Sliding window of the last 15 messages with a 2-hour TTL. Ensures conversational continuity.
+- **Warm Memory (Qdrant)**: Embeddings-based retrieval (Gemini-embedding-001) for historical knowledge and technical documentation.
+- **Cold Memory (PostgreSQL)**: Persistent records for users, roles, and bounty status managed via Prisma.
+
+### 3. Tool Execution Engine
+The `ExecutorService` acts as the safety barrier for all agent-initiated actions:
+- **Validation**: Enforces strict Zod schema validation on tool arguments.
+- **Human-in-the-Loop (HITL)**: Suspends execution for actions designated as "Sensitive" (e.g., destructive updates), persisting the state until manual confirmation is received.
+- **Data Truncation**: Enforces a 15,000 character limit on tool outputs to prevent context window overflow.
+
+---
+
+## Security and Roadmap
+
+### Authentication and Roles
+Elena utilizes a Group-First security model where users must be first identified in a shared group context before accessing DM capabilities. Role escalation (Superadmin/Admin) is governed by founder-approval flows.
+
+### Roadmap (Phase 5+)
+- **Encrypted Secret Vault**: Planned implementation of AES-256-GCM for securing user-specific credentials.
+- **Langfuse Integration**: Planned observability layer for deep tracing of LLM token usage and reasoning steps.
+- **Parallel Tool Execution**: Optimization for multi-turn reasoning cycles.
+
+---
+
+## Extensibility
+
+### Implementing New Capabilities
+1. **Tool Creation**: Implement the `AgentTool` interface and register in the `RegistryService`.
+2. **Specialist Addition**: Define a new agent class inheriting from `BaseAgent`, assign a tool whitelist, and update the Manager's delegation prompt.
+3. **Memory Integration**: New items can be added to the `MemoryAssembler` to provide broader context to the reasoning engine.
