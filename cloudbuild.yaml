@@ -36,4 +36,5 @@ steps:
       - '--memory=2Gi'
       - '--timeout=600'
       - '--set-env-vars=PROCESS_TYPE=worker'
-      - '--command=node,dist/src/worker.js'
+      - '--command=node'
+      - '--args=dist/src/worker.js'
