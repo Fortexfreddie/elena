@@ -1,33 +1,39 @@
 steps:
+  # 1. Build the shared image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/elena-web', '.']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/elena-app', '.']
+
+  # 2. Push to Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/elena-web']
+    args: ['push', 'gcr.io/$PROJECT_ID/elena-app']
+
+  # 3. Deploy WEB Service
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
       - 'elena-web'
-      - '--image=gcr.io/$PROJECT_ID/elena-web'
+      - '--image=gcr.io/$PROJECT_ID/elena-app'
       - '--region=us-central1'
-      - '--platform=managed'
       - '--allow-unauthenticated'
       - '--port=3000'
       - '--max-instances=40'
+      - '--set-env-vars=PROCESS_TYPE=web'
+
+  # 4. Deploy WORKER Service
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
       - 'elena-worker'
-      - '--image=gcr.io/$PROJECT_ID/elena-web'
+      - '--image=gcr.io/$PROJECT_ID/elena-app'
       - '--region=us-central1'
-      - '--platform=managed'
       - '--no-allow-unauthenticated'
       - '--no-cpu-throttling'
       - '--min-instances=1'
       - '--memory=2Gi'
+      - '--timeout=600'
       - '--set-env-vars=PROCESS_TYPE=worker'
-      - '--command=node'
-      - '--args=dist/worker.js'
+      - '--command=node,dist/src/worker.js'

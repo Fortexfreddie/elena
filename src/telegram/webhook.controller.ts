@@ -72,6 +72,7 @@ export class WebhookController {
             return { ok: true };
         }
 
+        let parsed: any = null;
         try {
             // Step 0.5: Check for Callback Queries (Approval Flow)
             if (update.callback_query) {
@@ -172,7 +173,7 @@ export class WebhookController {
             }
 
             // Step 2: Parse the update
-            const parsed = parseMessage(update, this.botId);
+            parsed = parseMessage(update, this.botId);
             if (!parsed) {
                 // Not a processable message (e.g., channel post, bot message)
                 return { ok: true };
@@ -231,9 +232,12 @@ export class WebhookController {
             // Release the update_id lock so Telegram's retry can get through
             await this.redisService.client.del(`update:${String(updateId)}`);
 
-            const message =
-                error instanceof Error ? error.message : 'Unknown webhook error';
-            this.logger.error(`Webhook pipeline error: ${message}`);
+            this.logger.error({
+                msg: 'Webhook pipeline error',
+                error,
+                updateId,
+                parsedUserId: parsed?.userId ?? 'unparsed'
+            });
 
             // Return 200 to prevent Telegram from spamming retries
             return { ok: true };

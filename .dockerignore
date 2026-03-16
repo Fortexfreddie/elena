@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.env
+.vscode
+.gemini
+brain
+*.tsbuildinfo
+*.log
+coverage

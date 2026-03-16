@@ -50,11 +50,6 @@ const envSchema = z.object({
     // GitHub (optional)
     GITHUB_TOKEN: z.string().optional(),
 
-    // Founding members
-    FOUNDER_1_TELEGRAM_ID: z.string().optional(),
-    FOUNDER_2_TELEGRAM_ID: z.string().optional(),
-    FOUNDER_3_TELEGRAM_ID: z.string().optional(),
-
     // Google Cloud
     GCP_PROJECT_ID: z.string().optional(),
 });

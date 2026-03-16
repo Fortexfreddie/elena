@@ -1,0 +1,40 @@
+services:
+  elena-web:
+    build: .
+    container_name: elena-web
+    env_file: .env
+    environment:
+      - PROCESS_TYPE=web
+      - NODE_ENV=${NODE_ENV:-development}
+    ports:
+      - "${PORT}:${PORT}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  elena-worker:
+    build: .
+    container_name: elena-worker
+    env_file: .env
+    environment:
+      - PROCESS_TYPE=worker
+      - NODE_ENV=${NODE_ENV:-development}
+    command: ["node", "dist/src/worker.js"]
+    depends_on:
+      - elena-web
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: elena-ngrok
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command:
+      - "http"
+      - "elena-web:${PORT:-3003}"
+      - "--url=${NGROK_DOMAIN}"
+    depends_on:
+      - elena-web
+    restart: unless-stopped
