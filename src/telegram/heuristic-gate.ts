@@ -15,43 +15,43 @@ import type { ParsedMessage } from '@app/common/types/telegram.types';
  * Everything else → discard.
  */
 export function shouldProcess(parsed: ParsedMessage): boolean {
-    // DMs always pass — user messaged Elena directly
-    if (parsed.isDm) {
-        return true;
-    }
+  // DMs always pass — user messaged Elena directly
+  if (parsed.isDm) {
+    return true;
+  }
 
-    // Reply to bot's message always passes
-    if (parsed.replyToBot) {
-        return true;
-    }
+  // Reply to bot's message always passes
+  if (parsed.replyToBot) {
+    return true;
+  }
 
-    // No text means media-only message.
-    // In Phase 3.14, we allow silent media in groups to reach the FilterAgent.
-    const text = parsed.text;
-    if (!text) {
-        return parsed.hasMedia; // Pass if it has an image/voice, otherwise skip
-    }
+  // No text means media-only message.
+  // In Phase 3.14, we allow silent media in groups to reach the FilterAgent.
+  const text = parsed.text;
+  if (!text) {
+    return parsed.hasMedia; // Pass if it has an image/voice, otherwise skip
+  }
 
-    const lower = text.toLowerCase();
+  const lower = text.toLowerCase();
 
-    // Name mention check
-    if (containsElenaMention(lower)) {
-        return true;
-    }
+  // Name mention check
+  if (containsElenaMention(lower)) {
+    return true;
+  }
 
-    // Technical Keyword Check (Active Listening)
-    // Allows technical developer discussions to reach the FilterAgent even without a tag
-    if (containsTechnicalKeywords(lower)) {
-        return true;
-    }
+  // Technical Keyword Check (Active Listening)
+  // Allows technical developer discussions to reach the FilterAgent even without a tag
+  if (containsTechnicalKeywords(lower)) {
+    return true;
+  }
 
-    // Slash command check
-    if (lower.startsWith('/')) {
-        return true;
-    }
+  // Slash command check
+  if (lower.startsWith('/')) {
+    return true;
+  }
 
-    // Everything else in a group chat → discard
-    return false;
+  // Everything else in a group chat → discard
+  return false;
 }
 
 import { TECHNICAL_KEYWORDS } from '@app/common/gemini/gemini.constants';
@@ -60,19 +60,14 @@ import { TECHNICAL_KEYWORDS } from '@app/common/gemini/gemini.constants';
  * Stage 1.5 Keyword Heuristic for developer group chats.
  */
 function containsTechnicalKeywords(lowerText: string): boolean {
-    return TECHNICAL_KEYWORDS.some((keyword) => lowerText.includes(keyword));
+  return TECHNICAL_KEYWORDS.some((keyword) => lowerText.includes(keyword));
 }
 
 /**
  * Check if the text mentions Elena by name or common variations.
  */
 function containsElenaMention(lowerText: string): boolean {
-    const triggers = [
-        'elena',
-        '@elena',
-        'hey elena',
-        'yo elena',
-    ];
+  const triggers = ['elena', '@elena', 'hey elena', 'yo elena'];
 
-    return triggers.some((trigger) => lowerText.includes(trigger));
+  return triggers.some((trigger) => lowerText.includes(trigger));
 }

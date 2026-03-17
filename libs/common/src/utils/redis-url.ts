@@ -6,26 +6,26 @@
  */
 
 export function extractRedisHost(url: string): string {
-    try {
-        return new URL(url).hostname;
-    } catch {
-        return 'localhost';
-    }
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return 'localhost';
+  }
 }
 
 export function extractRedisPort(url: string): number {
-    try {
-        const port = new URL(url).port;
-        return port ? parseInt(port, 10) : 6379;
-    } catch {
-        return 6379;
-    }
+  try {
+    const port = new URL(url).port;
+    return port ? parseInt(port, 10) : 6379;
+  } catch {
+    return 6379;
+  }
 }
 
 export function extractRedisPassword(url: string): string {
-    try {
-        return new URL(url).password;
-    } catch {
-        return '';
-    }
+  try {
+    return new URL(url).password;
+  } catch {
+    return '';
+  }
 }

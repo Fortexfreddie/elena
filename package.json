@@ -26,6 +26,7 @@
     "db:migrate": "npx prisma migrate deploy",
     "db:init": "npx prisma migrate dev --name init",
     "db:clean": "npx prisma migrate reset --force && npx prisma generate",
+    "db:nuke": "pnpm run db:clean && ts-node scripts/reset-all.ts",
     "webhook:set": "ts-node scripts/set-webhook.ts"
   },
   "dependencies": {

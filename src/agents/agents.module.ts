@@ -11,23 +11,18 @@ import { PersonasInjector } from './personas.injector';
 import { ToolsModule } from '../tools/tools.module';
 
 @Module({
-    imports: [forwardRef(() => ToolsModule)],
-    providers: [
-        FilterAgent,
-        CoderAgent,
-        ReviewerAgent,
-        ResearcherAgent,
-        BrainstormAgent,
-        TaskAgent,
-        ManagerAgent,
-        OnboardingAgent,
-        PersonasInjector
-    ],
-    exports: [
-        FilterAgent,
-        ManagerAgent,
-        OnboardingAgent,
-        PersonasInjector
-    ],
+  imports: [forwardRef(() => ToolsModule)],
+  providers: [
+    FilterAgent,
+    CoderAgent,
+    ReviewerAgent,
+    ResearcherAgent,
+    BrainstormAgent,
+    TaskAgent,
+    ManagerAgent,
+    OnboardingAgent,
+    PersonasInjector,
+  ],
+  exports: [FilterAgent, ManagerAgent, OnboardingAgent, PersonasInjector],
 })
-export class AgentsModule { }
+export class AgentsModule {}

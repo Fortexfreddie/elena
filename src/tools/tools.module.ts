@@ -12,37 +12,42 @@ import { RunCodeTool } from './run-code.tool';
 import { WebSearchTool } from './web-search.tool';
 import { LogMonitorTool } from './log-monitor.tool';
 import { DelegateTaskTool } from './delegate-task.tool';
+import { SaveInterviewTool } from './save-interview.tool';
+import { UpdateUserProfileTool } from './update-user-profile.tool';
+import { ApproveUserTool } from './approve-user.tool';
 import { MemoryModule } from '../memory/memory.module';
 import { PrismaModule } from '@app/database';
 import { TelegramModule } from '../telegram/telegram.module';
 import { QueueModule } from '../queue/queue.module';
+import { PersonasModule } from '../personas/personas.module';
 import { forwardRef } from '@nestjs/common';
 
 @Module({
-    imports: [
-        MemoryModule,
-        PrismaModule,
-        forwardRef(() => TelegramModule),
-        forwardRef(() => QueueModule),
-    ],
-    providers: [
-        RegistryService,
-        ExecutorService,
-        GithubFetchTool,
-        MemorySearchTool,
-        DocScraperTool,
-        BountyUpdateTool,
-        SendDmTool,
-        SendReminderTool,
-        DraftMessageTool,
-        RunCodeTool,
-        WebSearchTool,
-        LogMonitorTool,
-        DelegateTaskTool
-    ],
-    exports: [
-        RegistryService,
-        ExecutorService
-    ]
+  imports: [
+    MemoryModule,
+    PrismaModule,
+    PersonasModule,
+    forwardRef(() => TelegramModule),
+    forwardRef(() => QueueModule),
+  ],
+  providers: [
+    RegistryService,
+    ExecutorService,
+    GithubFetchTool,
+    MemorySearchTool,
+    DocScraperTool,
+    BountyUpdateTool,
+    SendDmTool,
+    SendReminderTool,
+    DraftMessageTool,
+    RunCodeTool,
+    WebSearchTool,
+    LogMonitorTool,
+    DelegateTaskTool,
+    SaveInterviewTool,
+    UpdateUserProfileTool,
+    ApproveUserTool,
+  ],
+  exports: [RegistryService, ExecutorService, SaveInterviewTool, UpdateUserProfileTool, ApproveUserTool],
 })
-export class ToolsModule { }
+export class ToolsModule {}

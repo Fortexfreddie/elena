@@ -9,28 +9,34 @@ import type { FunctionDeclaration } from '@google/genai';
 
 @Injectable()
 export class ReviewerAgent extends BaseAgent {
-    constructor(
-        geminiService: GeminiService,
-        executorService: ExecutorService,
-        private readonly registry: RegistryService,
-        personasInjector: PersonasInjector
-    ) {
-        super('reviewer', GEMINI_MODELS.PRO, geminiService, executorService, personasInjector);
-    }
+  constructor(
+    geminiService: GeminiService,
+    executorService: ExecutorService,
+    private readonly registry: RegistryService,
+    personasInjector: PersonasInjector,
+  ) {
+    super(
+      'reviewer',
+      GEMINI_MODELS.PRO,
+      geminiService,
+      executorService,
+      personasInjector,
+    );
+  }
 
-    private static readonly ALLOWED_TOOLS = [
-        'github_fetch',
-        'memory_search',
-        'web_search'
-    ];
+  private static readonly ALLOWED_TOOLS = [
+    'github_fetch',
+    'memory_search',
+    'web_search',
+  ];
 
-    protected getTools(): FunctionDeclaration[] {
-        return this.registry.getToolDeclarations(ReviewerAgent.ALLOWED_TOOLS);
-    }
+  protected getTools(): FunctionDeclaration[] {
+    return this.registry.getToolDeclarations(ReviewerAgent.ALLOWED_TOOLS);
+  }
 
-    protected getRoleInstruction(): string {
-        return `You are Elena's Reviewer persona. Your job is to review pull requests, code snippets, and architectural plans.
+  protected getRoleInstruction(): string {
+    return `You are Elena's Reviewer persona. Your job is to review pull requests, code snippets, and architectural plans.
 Look for security vulnerabilities, edge cases, and deviations from best practices.
 Be strict but constructive.`;
-    }
+  }
 }

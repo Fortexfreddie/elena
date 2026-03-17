@@ -1,11 +1,11 @@
 import { TELEGRAM_MAX_CHARS } from '../gemini/gemini.constants';
 
 interface MarkdownState {
-    isBold: boolean;
-    isItalic: boolean;
-    isInlineCode: boolean;
-    isCodeBlock: boolean;
-    codeBlockLang: string;
+  isBold: boolean;
+  isItalic: boolean;
+  isInlineCode: boolean;
+  isCodeBlock: boolean;
+  codeBlockLang: string;
 }
 
 /**
@@ -16,141 +16,146 @@ interface MarkdownState {
  * Split priority: \n\n → \n → last space → hard cut
  */
 export function chunkMessage(
-    text: string,
-    maxLen: number = TELEGRAM_MAX_CHARS,
+  text: string,
+  maxLen: number = TELEGRAM_MAX_CHARS,
 ): string[] {
-    const REOPEN_PREFIX_MAX = 20; // Spare room for reopening markdown tags (```lang\n, etc)
-    const effectiveMax = maxLen - REOPEN_PREFIX_MAX;
+  const REOPEN_PREFIX_MAX = 20; // Spare room for reopening markdown tags (```lang\n, etc)
+  const effectiveMax = maxLen - REOPEN_PREFIX_MAX;
 
-    if (text.length <= effectiveMax) {
-        return [text];
+  if (text.length <= effectiveMax) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let remaining = text;
+  let state: MarkdownState = {
+    isBold: false,
+    isItalic: false,
+    isInlineCode: false,
+    isCodeBlock: false,
+    codeBlockLang: '',
+  };
+
+  while (remaining.length > 0) {
+    if (remaining.length <= effectiveMax) {
+      chunks.push(applyPrefix(remaining, state));
+      break;
     }
 
-    const chunks: string[] = [];
-    let remaining = text;
-    let state: MarkdownState = {
-        isBold: false,
-        isItalic: false,
-        isInlineCode: false,
-        isCodeBlock: false,
-        codeBlockLang: '',
-    };
+    const slice = remaining.slice(0, effectiveMax);
+    const splitIdx = findSplitPoint(slice, effectiveMax);
+    let chunk = remaining.slice(0, splitIdx);
+    remaining = remaining.slice(splitIdx);
 
-    while (remaining.length > 0) {
-        if (remaining.length <= effectiveMax) {
-            chunks.push(applyPrefix(remaining, state));
-            break;
-        }
+    // Track markdown state through this chunk
+    const newState = trackMarkdownState(chunk, state);
 
-        const slice = remaining.slice(0, effectiveMax);
-        const splitIdx = findSplitPoint(slice, effectiveMax);
-        let chunk = remaining.slice(0, splitIdx);
-        remaining = remaining.slice(splitIdx);
+    // Close any open tags at the end of the chunk
+    const suffix = buildClosingSuffix(newState);
+    chunk = applyPrefix(chunk, state) + suffix;
 
-        // Track markdown state through this chunk
-        const newState = trackMarkdownState(chunk, state);
+    chunks.push(chunk);
 
-        // Close any open tags at the end of the chunk
-        const suffix = buildClosingSuffix(newState);
-        chunk = applyPrefix(chunk, state) + suffix;
+    // The next chunk needs to reopen the tags
+    state = newState;
+  }
 
-        chunks.push(chunk);
-
-        // The next chunk needs to reopen the tags
-        state = newState;
-    }
-
-    return chunks;
+  return chunks;
 }
 
 function findSplitPoint(text: string, maxLen: number): number {
-    // Priority: \n\n → \n → last space → hard cut
-    const doubleNewline = text.lastIndexOf('\n\n');
-    if (doubleNewline > maxLen * 0.5) {
-        return doubleNewline + 2;
-    }
+  // Priority: \n\n → \n → last space → hard cut
+  const doubleNewline = text.lastIndexOf('\n\n');
+  if (doubleNewline > maxLen * 0.5) {
+    return doubleNewline + 2;
+  }
 
-    const singleNewline = text.lastIndexOf('\n');
-    if (singleNewline > maxLen * 0.5) {
-        return singleNewline + 1;
-    }
+  const singleNewline = text.lastIndexOf('\n');
+  if (singleNewline > maxLen * 0.5) {
+    return singleNewline + 1;
+  }
 
-    const lastSpace = text.lastIndexOf(' ');
-    if (lastSpace > maxLen * 0.5) {
-        return lastSpace + 1;
-    }
+  const lastSpace = text.lastIndexOf(' ');
+  if (lastSpace > maxLen * 0.5) {
+    return lastSpace + 1;
+  }
 
-    return maxLen;
+  return maxLen;
 }
 
 function trackMarkdownState(
-    text: string,
-    initial: MarkdownState,
+  text: string,
+  initial: MarkdownState,
 ): MarkdownState {
-    const state = { ...initial };
+  const state = { ...initial };
 
-    for (let i = 0; i < text.length; i++) {
-        // Code block detection: ```
-        if (text.slice(i, i + 3) === '```') {
-            if (state.isCodeBlock) {
-                state.isCodeBlock = false;
-                state.codeBlockLang = '';
-            } else {
-                state.isCodeBlock = true;
-                // Capture language hint after ```
-                const rest = text.slice(i + 3);
-                const langMatch = /^([a-zA-Z0-9]+)/.exec(rest);
-                state.codeBlockLang = langMatch ? langMatch[1] : '';
-            }
-            i += 2; // skip past ```
-            continue;
-        }
-
-        // Inside code block, don't track inline formatting
-        if (state.isCodeBlock) continue;
-
-        // Inline code: `
-        if (text[i] === '`') {
-            state.isInlineCode = !state.isInlineCode;
-            continue;
-        }
-
-        // Inside inline code, don't track formatting
-        if (state.isInlineCode) continue;
-
-        // Bold: **
-        if (text.slice(i, i + 2) === '**') {
-            state.isBold = !state.isBold;
-            i += 1;
-            continue;
-        }
-
-        // Italic: _ (single underscore, not inside a word)
-        if (text[i] === '_' && text[i + 1] !== '_') {
-            state.isItalic = !state.isItalic;
-            continue;
-        }
+  for (let i = 0; i < text.length; i++) {
+    // Handle escaped characters: skip the next character if it's preceded by a backslash
+    if (text[i] === '\\') {
+      i += 1;
+      continue;
     }
 
-    return state;
+    // Code block detection: ```
+    if (text.slice(i, i + 3) === '```') {
+      if (state.isCodeBlock) {
+        state.isCodeBlock = false;
+        state.codeBlockLang = '';
+      } else {
+        state.isCodeBlock = true;
+        // Capture language hint after ```
+        const rest = text.slice(i + 3);
+        const langMatch = /^([a-zA-Z0-9]+)/.exec(rest);
+        state.codeBlockLang = langMatch ? langMatch[1] : '';
+      }
+      i += 2; // skip past ```
+      continue;
+    }
+
+    // Inside code block, don't track inline formatting
+    if (state.isCodeBlock) continue;
+
+    // Inline code: `
+    if (text[i] === '`') {
+      state.isInlineCode = !state.isInlineCode;
+      continue;
+    }
+
+    // Inside inline code, don't track formatting
+    if (state.isInlineCode) continue;
+
+    // Bold: * (MarkdownV2 uses single asterisk)
+    if (text[i] === '*') {
+      state.isBold = !state.isBold;
+      continue;
+    }
+
+    // Italic: _ (single underscore, not inside a word)
+    if (text[i] === '_') {
+      state.isItalic = !state.isItalic;
+      continue;
+    }
+  }
+
+  return state;
 }
 
 function buildClosingSuffix(state: MarkdownState): string {
-    let suffix = '';
-    if (state.isInlineCode) suffix += '`';
-    if (state.isBold) suffix += '**';
-    if (state.isItalic) suffix += '_';
-    if (state.isCodeBlock) suffix += '\n```';
-    return suffix;
+  let suffix = '';
+  if (state.isInlineCode) suffix += '`';
+  if (state.isBold) suffix += '*';
+  if (state.isItalic) suffix += '_';
+  if (state.isCodeBlock) suffix += '\n```';
+  return suffix;
 }
 
 function applyPrefix(text: string, state: MarkdownState): string {
-    let prefix = '';
-    if (state.isCodeBlock) {
-        prefix += '```' + state.codeBlockLang + '\n';
-    }
-    if (state.isItalic) prefix += '_';
-    if (state.isBold) prefix += '**';
-    if (state.isInlineCode) prefix += '`';
-    return prefix + text;
+  let prefix = '';
+  if (state.isCodeBlock) {
+    prefix += '```' + state.codeBlockLang + '\n';
+  }
+  if (state.isItalic) prefix += '_';
+  if (state.isBold) prefix += '*';
+  if (state.isInlineCode) prefix += '`';
+  return prefix + text;
 }

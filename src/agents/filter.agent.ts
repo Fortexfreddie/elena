@@ -4,9 +4,13 @@ import { GEMINI_MODELS } from '@app/common/gemini/gemini.constants';
 import { Type } from '@google/genai';
 import type { Content, Part } from '@google/genai';
 import { ModelError } from '@app/common/types/errors';
-import type { AgentContext, FilterDecision } from '@app/common/types/agent.types';
+import type {
+  AgentContext,
+  FilterDecision,
+} from '@app/common/types/agent.types';
 import type { ParsedMessage } from '@app/common/types/telegram.types';
 import type { HotMemoryEntry } from '@app/common/types/agent.types';
+import { PersonasInjector } from './personas.injector';
 
 /**
  * Filter Agent — Stage 2 of the pipeline.
@@ -18,187 +22,137 @@ import type { HotMemoryEntry } from '@app/common/types/agent.types';
  */
 @Injectable()
 export class FilterAgent {
-    private readonly logger = new Logger(FilterAgent.name);
+  private readonly logger = new Logger(FilterAgent.name);
 
-    constructor(private readonly geminiService: GeminiService) { }
+  constructor(
+    private readonly geminiService: GeminiService,
+    private readonly personasInjector: PersonasInjector,
+  ) {}
 
-    /**
-     * Route the message to the appropriate action.
-     *
-     * @param parsed The parsed message from Telegram
-     * @param hotMessages Recent chat context for decision-making
-     * @param mediaContent Optional media (pixels) for multimodal routing
-     * @returns FilterDecision with action + optional reply/routeTo
-     */
-    async route(
-        parsed: ParsedMessage,
-        hotMessages: HotMemoryEntry[] = [],
-        mediaContent?: Part,
-    ): Promise<FilterDecision> {
-        const messageText = parsed.text ?? '[media message]';
+  /**
+   * Route the message to the appropriate action.
+   *
+   * @param parsed The parsed message from Telegram
+   * @param hotMessages Recent chat context for decision-making
+   * @param mediaContent Optional media (pixels) for multimodal routing
+   * @returns FilterDecision with action + optional reply/routeTo
+   */
+  async route(
+    parsed: ParsedMessage,
+    hotMessages: HotMemoryEntry[] = [],
+    mediaContent?: Part,
+    userProfile?: any,
+  ): Promise<FilterDecision> {
+    const messageText = parsed.text ?? '[media message]';
 
-        const contextLines = hotMessages
-            .slice(-7) // Increased from 5 to 7 for better routing intelligence
-            .map((m) => `${m.role}: ${m.text}`)
-            .join('\n');
+    const contextLines = hotMessages
+      .slice(-7) // Increased from 5 to 7 for better routing intelligence
+      .map((m) => `${m.role}: ${m.text}`)
+      .join('\n');
 
-        const systemPrompt = `You are Elena's message router in a high-stakes developer group chat.
-            You decide if Elena should: 
-            1. Ignore the message.
-            2. Reply directly (for small talk).
-            3. Route to a specialist (for real work).
+    const systemPrompt = `You are Elena's message router in a high-stakes developer group chat.
+Output STRICTLY valid JSON matching this schema:
+{ 
+  "action": "ignore" | "reply" | "route",
+  "routeTo": "manager" | "coder" | "reviewer" | "researcher" | "brainstorm" | "task",
+  "reply": "string (only when action=reply, must match Elena persona)",
+  "reason": "string"
+}
 
-            PROACTIVE LISTENING RULES:
-            - If a message is NOT directed at Elena (@ElenaSquadBot) AND is just casual chat, action = "ignore".
-            - CRITICAL: Even if NOT tagged, if you see technical questions, bugs, or discussions about Solana, Next.js, Flutter, or "The Chatter Project", action = "route" to the appropriate specialist. Elena should jump in to provide value.
-            - If Elena IS tagged (@ElenaSquadBot) OR the message starts with a command (e.g., /help, /cancel), you MUST either "reply" or "route". Never ignore a direct tag or a command.
-            - If the user provides an image AND an explicit request (e.g., "describe this", "what is this?"), action = "route" and routeTo = "manager". 
-            - In Private Chats (DMs), NEVER ignore a request even if it seems non-technical. Elena is a personal assistant there.
+ROUTING RULES (Evaluate in order, stop at first match):
+1. If message starts with a command (e.g., /help, /cancel) -> action="route", routeTo="manager"
+2. If message involves logs, system status, debugging, "checking truth", OR User Management (promote, demote, permissions, roles) -> action="route", routeTo="task" (NEVER reply directly to these; the Filter Agent lacks the tools to execute them)
+3. If Elena IS tagged (@ElenaSquadBot) AND it's small talk -> action="reply", reply="response"
+4. If Elena IS tagged (@ElenaSquadBot) AND it's technical or administrative -> action="route", routeTo="task" (or appropriate specialist)
+5. If NOT tagged AND it's technical (code, bugs, solana, nextjs, flutter, "The Chatter Project") -> action="route", routeTo=appropriate specialist
+6. In Private Chats (DMs) -> action="route", routeTo="manager" or appropriate specialist
+7. If NOT tagged AND it's casual/small talk -> action="ignore"
+8. If none of the above match, but it feels like a request for action -> action="route", routeTo="manager"
+`;
 
-            ROUTING RULES:
-            - SMALL TALK (hi, thanks, etc.): action = "reply".
-            - IDENTITY/CONTEXT (Who are you? Who am I?): action = "route", routeTo = "manager".
-            - SYSTEM STATUS (What is the status? Are there errors? Show logs): action = "route", routeTo = "coder" or "researcher".
-            - TECH/WORK (Code, research, tasks): action = "route", specify the sub-agent (coder, researcher, etc.).
 
-            Sub-agents: manager, coder, reviewer, researcher, brainstorm, task`;
-
-        const chatType = parsed.isDm ? 'Private Chat (DM)' : 'Group Chat';
-        const userMessage = `[Mode: ${chatType}]
+    const chatType = parsed.isDm ? 'Private Chat (DM)' : 'Group Chat';
+    const userMessage = `[Mode: ${chatType}]
 ${contextLines ? `Recent context:\n${contextLines}\n\n` : ''}New message from user ${parsed.userId}:\n${messageText}`;
 
-        const startTime = Date.now();
+    const startTime = Date.now();
 
-        try {
-            const contents: Content[] = [{ role: 'user', parts: [{ text: userMessage }] }];
-            
-            if (mediaContent && contents[0]?.parts) {
-                contents[0].parts.push(mediaContent);
-            }
+    try {
+      const contents: Content[] = [
+        { role: 'user', parts: [{ text: userMessage }] },
+      ];
 
-            const response = await this.geminiService.generateContent(
-                GEMINI_MODELS.FILTER,
-                contents,
-                {
-                    systemInstruction: systemPrompt,
-                    tools: [
-                        {
-                            functionDeclarations: [
-                                {
-                                    name: 'route_decision',
-                                    description:
-                                        'Report the routing decision for this message',
-                                    parameters: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            action: {
-                                                type: Type.STRING,
-                                                description:
-                                                    'The action to take: "ignore", "reply", or "route"',
-                                                enum: ['ignore', 'reply', 'route'],
-                                            },
-                                            reply: {
-                                                type: Type.STRING,
-                                                description:
-                                                    'The reply text (only when action is "reply")',
-                                            },
-                                            route_to: {
-                                                type: Type.STRING,
-                                                description:
-                                                    'The sub-agent to route to (only when action is "route")',
-                                                enum: [
-                                                    'manager',
-                                                    'coder',
-                                                    'reviewer',
-                                                    'researcher',
-                                                    'brainstorm',
-                                                    'task',
-                                                ],
-                                            },
-                                            reason: {
-                                                type: Type.STRING,
-                                                description: 'Brief reason for this decision',
-                                            },
-                                        },
-                                        required: ['action', 'reason'],
-                                    },
-                                },
-                            ],
-                        },
-                    ],
-                },
-            );
+      if (mediaContent && contents[0]?.parts) {
+        contents[0].parts.push(mediaContent);
+      }
 
-            // Stage 3: Strict Function Call Validation (Priority 2, Item 9)
-            const functionCalls = response.functionCalls || [];
-            
-            // Case 1: No function calls at all
-            if (functionCalls.length === 0) {
-                this.logger.warn(`Model returned no function calls. Defaulting to manager.`);
-                return {
-                    action: 'route',
-                    routeTo: 'manager',
-                    reason: 'FAILSAFE: Model returned text or empty response instead of route_decision. Defaulting to manager.',
-                };
-            }
+      const personaBlock = await this.personasInjector.buildForFilter(parsed, userProfile);
 
-            const call = functionCalls[0];
+      const response = await this.geminiService.generateContent(
+        GEMINI_MODELS.FILTER,
+        contents,
+        {
+          systemInstruction: `${personaBlock}\n\n${systemPrompt}`,
+        },
+      );
 
-            // Case 2: Wrong function name
-            if (call.name !== 'route_decision') {
-                this.logger.warn(`Model called wrong function: ${call.name}. Defaulting to manager.`);
-                return {
-                    action: 'route',
-                    routeTo: 'manager',
-                    reason: `FAILSAFE: Model called unknown function "${call.name}". Defaulting to manager.`,
-                };
-            }
+      let decisionJson: any;
+      try {
+        const text = response.text || '';
+        const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+        decisionJson = JSON.parse(cleanText);
+      } catch (parseError) {
+        this.logger.warn(`Model failed to return valid JSON. Defaulting to manager. Raw: ${response.text}`);
+        return {
+          action: 'route',
+          routeTo: 'manager',
+          reason: 'FAILSAFE: JSON parse failed or invalid response from model.',
+        };
+      }
 
-            const args = call.args as Record<string, unknown>;
+      const action = decisionJson.action as string;
+      if (!['ignore', 'reply', 'route'].includes(action)) {
+        this.logger.warn(
+          `Model provided invalid action value: ${action}. Defaulting to manager.`,
+        );
+        return {
+          action: 'route',
+          routeTo: 'manager',
+          reason: `FAILSAFE: Model provided invalid action "${action}". Defaulting to manager.`,
+        };
+      }
 
-            // Case 3: Missing or wrong arg keys
-            if (!args['action'] || !args['reason']) {
-                this.logger.warn(`Model provided incomplete args: ${JSON.stringify(args)}. Defaulting to manager.`);
-                return {
-                    action: 'route',
-                    routeTo: 'manager',
-                    reason: 'FAILSAFE: Model provided incomplete routing arguments. Defaulting to manager.',
-                };
-            }
+      this.logger.log(
+        `[FILTER_TRACE] Routing decision: ${action} (to: ${decisionJson.routeTo ?? 'N/A'}). Reason: ${decisionJson.reason}. Made in ${Date.now() - startTime}ms`,
+      );
 
-            const action = args['action'] as string;
-            if (!['ignore', 'reply', 'route'].includes(action)) {
-                 this.logger.warn(`Model provided invalid action value: ${action}. Defaulting to manager.`);
-                 return {
-                    action: 'route',
-                    routeTo: 'manager',
-                    reason: `FAILSAFE: Model provided invalid action "${action}". Defaulting to manager.`,
-                };
-            }
+      return {
+        action: action as 'ignore' | 'reply' | 'route',
+        reply:
+          action === 'reply'
+            ? (decisionJson.reply as string | undefined)
+            : undefined,
+        routeTo:
+          action === 'route'
+            ? (decisionJson.routeTo as string | undefined)
+            : undefined,
+        reason: decisionJson.reason as string,
+      };
+    } catch (error: unknown) {
+      if (error instanceof ModelError) {
+        this.logger.error(`Filter agent model error: ${error.message}`);
+      } else {
+        const message =
+          error instanceof Error ? error.message : 'Unknown filter error';
+        this.logger.error(`Filter agent error: ${message}`);
+      }
 
-            this.logger.log(`[FILTER_TRACE] Routing decision: ${action} (to: ${args['route_to'] ?? 'N/A'}). Reason: ${args['reason']}. Made in ${Date.now() - startTime}ms`);
-            
-            return {
-                action: action as 'ignore' | 'reply' | 'route',
-                reply: action === 'reply' ? (args['reply'] as string | undefined) : undefined,
-                routeTo: action === 'route' ? (args['route_to'] as string | undefined) : undefined,
-                reason: (args['reason'] as string),
-            };
-        } catch (error: unknown) {
-            if (error instanceof ModelError) {
-                this.logger.error(`Filter agent model error: ${error.message}`);
-            } else {
-                const message =
-                    error instanceof Error ? error.message : 'Unknown filter error';
-                this.logger.error(`Filter agent error: ${message}`);
-            }
-
-            // On filter failure, default to route to manager (fail-open for user experience)
-            return {
-                action: 'route',
-                routeTo: 'manager',
-                reason: 'Filter agent failed — routing to manager as fallback',
-            };
-        }
+      // On filter failure, default to route to manager (fail-open for user experience)
+      return {
+        action: 'route',
+        routeTo: 'manager',
+        reason: 'Filter agent failed — routing to manager as fallback',
+      };
     }
+  }
 }

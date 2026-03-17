@@ -3,7 +3,7 @@ import { GeminiService } from './gemini.service';
 
 @Global()
 @Module({
-    providers: [GeminiService],
-    exports: [GeminiService],
+  providers: [GeminiService],
+  exports: [GeminiService],
 })
-export class GeminiModule { }
+export class GeminiModule {}

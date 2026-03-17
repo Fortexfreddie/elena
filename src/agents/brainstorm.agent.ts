@@ -9,27 +9,33 @@ import type { FunctionDeclaration } from '@google/genai';
 
 @Injectable()
 export class BrainstormAgent extends BaseAgent {
-    constructor(
-        geminiService: GeminiService,
-        executorService: ExecutorService,
-        private readonly registry: RegistryService,
-        personasInjector: PersonasInjector
-    ) {
-        super('brainstorm', GEMINI_MODELS.PRO, geminiService, executorService, personasInjector);
-    }
+  constructor(
+    geminiService: GeminiService,
+    executorService: ExecutorService,
+    private readonly registry: RegistryService,
+    personasInjector: PersonasInjector,
+  ) {
+    super(
+      'brainstorm',
+      GEMINI_MODELS.PRO,
+      geminiService,
+      executorService,
+      personasInjector,
+    );
+  }
 
-    private static readonly ALLOWED_TOOLS = [
-        'memory_search',
-        'web_search',
-        'draft_message'
-    ];
+  private static readonly ALLOWED_TOOLS = [
+    'memory_search',
+    'web_search',
+    'draft_message',
+  ];
 
-    protected getTools(): FunctionDeclaration[] {
-        return this.registry.getToolDeclarations(BrainstormAgent.ALLOWED_TOOLS);
-    }
+  protected getTools(): FunctionDeclaration[] {
+    return this.registry.getToolDeclarations(BrainstormAgent.ALLOWED_TOOLS);
+  }
 
-    protected getRoleInstruction(): string {
-        return `You are Elena's Brainstorm persona. Your job is to help the team explore ideas, system architectures, and feature planning.
+  protected getRoleInstruction(): string {
+    return `You are Elena's Brainstorm persona. Your job is to help the team explore ideas, system architectures, and feature planning.
 Think outside the box, propose edge cases, and ask clarifying questions.`;
-    }
+  }
 }

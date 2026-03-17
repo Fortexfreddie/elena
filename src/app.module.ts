@@ -5,9 +5,9 @@ import { LoggerModule } from 'nestjs-pino';
 import { PrismaModule } from '@app/database';
 import { GeminiModule, UpstashRedisModule } from '@app/common';
 import {
-    extractRedisHost,
-    extractRedisPort,
-    extractRedisPassword,
+  extractRedisHost,
+  extractRedisPort,
+  extractRedisPassword,
 } from '@app/common/utils/redis-url';
 import { TelegramModule } from './telegram/telegram.module';
 import { QueueModule } from './queue/queue.module';
@@ -35,11 +35,19 @@ import { HealthController } from './health.controller';
         transport:
           process.env['NODE_ENV'] !== 'production'
             ? {
-              targets: [
-                { target: 'pino-pretty', options: { colorize: true }, level: 'debug' },
-                { target: 'pino/file', options: { destination: './error.log' }, level: 'info' }
-              ]
-            }
+                targets: [
+                  {
+                    target: 'pino-pretty',
+                    options: { colorize: true },
+                    level: 'debug',
+                  },
+                  {
+                    target: 'pino/file',
+                    options: { destination: './error.log' },
+                    level: 'info',
+                  },
+                ],
+              }
             : undefined,
         level: process.env['NODE_ENV'] !== 'production' ? 'debug' : 'info',
         autoLogging: false,
@@ -51,9 +59,7 @@ import { HealthController } from './health.controller';
       connection: {
         host: extractRedisHost(process.env['UPSTASH_REDIS_URL'] ?? ''),
         port: extractRedisPort(process.env['UPSTASH_REDIS_URL'] ?? ''),
-        password: extractRedisPassword(
-          process.env['UPSTASH_REDIS_URL'] ?? '',
-        ),
+        password: extractRedisPassword(process.env['UPSTASH_REDIS_URL'] ?? ''),
         tls: {
           rejectUnauthorized: false, // Handle TLS blips
         },

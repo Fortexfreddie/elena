@@ -27,24 +27,24 @@ const providers: Provider[] = [QueueService];
 
 // Only enable the consumer logic if this is the worker process
 if (process.env['PROCESS_TYPE'] === 'worker') {
-    providers.push(MessageProcessor);
-    providers.push(HitlProcessor);
+  providers.push(MessageProcessor);
+  providers.push(HitlProcessor);
 }
 
 @Module({
-    imports: [
-        BullModule.registerQueue(
-            { name: QUEUE_NAMES.MESSAGES },
-            { name: QUEUE_NAMES.HITL },
-            { name: QUEUE_NAMES.SCHEDULED },
-        ),
-        forwardRef(() => AgentsModule),
-        forwardRef(() => ToolsModule),
-        MemoryModule,
-        forwardRef(() => OnboardingModule),
-        forwardRef(() => TelegramModule),
-    ],
-    providers,
-    exports: [QueueService],
+  imports: [
+    BullModule.registerQueue(
+      { name: QUEUE_NAMES.MESSAGES },
+      { name: QUEUE_NAMES.HITL },
+      { name: QUEUE_NAMES.SCHEDULED },
+    ),
+    forwardRef(() => AgentsModule),
+    forwardRef(() => ToolsModule),
+    MemoryModule,
+    forwardRef(() => OnboardingModule),
+    forwardRef(() => TelegramModule),
+  ],
+  providers,
+  exports: [QueueService],
 })
-export class QueueModule { }
+export class QueueModule {}

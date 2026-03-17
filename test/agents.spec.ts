@@ -23,7 +23,11 @@ describe('Hallucination Fixes (Unit)', () => {
 
   const mockFilterAgent = { route: jest.fn() };
   const mockManagerAgent = { execute: jest.fn() };
-  const mockReplySender = { sendTypingAction: jest.fn(), sendReply: jest.fn(), getBotId: jest.fn() };
+  const mockReplySender = {
+    sendTypingAction: jest.fn(),
+    sendReply: jest.fn(),
+    getBotId: jest.fn(),
+  };
   const mockAssembler = { assemble: jest.fn() };
   const mockHotMemory = { addMessage: jest.fn() };
   const mockOnboardingDetector = { check: jest.fn() };
@@ -75,17 +79,28 @@ describe('Hallucination Fixes (Unit)', () => {
       } as any;
 
       mockOnboardingDetector.check.mockResolvedValue('known');
-      mockAssembler.assemble.mockResolvedValue({ userProfile: { displayName: 'Fred' } });
-      mockFilterAgent.route.mockResolvedValue({ action: 'route', routeTo: 'manager', reason: 'test' });
-      mockManagerAgent.execute.mockResolvedValue({ text: 'Response', agentName: 'manager' });
+      mockAssembler.assemble.mockResolvedValue({
+        userProfile: { displayName: 'Fred' },
+      });
+      mockFilterAgent.route.mockResolvedValue({
+        action: 'route',
+        routeTo: 'manager',
+        reason: 'test',
+      });
+      mockManagerAgent.execute.mockResolvedValue({
+        text: 'Response',
+        agentName: 'manager',
+      });
 
       await processor.process({ id: 'job1', data: { parsedMessage } } as any);
 
       expect(mockManagerAgent.execute).toHaveBeenCalledWith(
         'manager',
         expect.objectContaining({
-          systemBlock: expect.stringContaining('VISUAL GROUNDING (ACTIVE — image detected)')
-        })
+          systemBlock: expect.stringContaining(
+            'VISUAL GROUNDING (ACTIVE — image detected)',
+          ),
+        }),
       );
     });
 
@@ -100,17 +115,26 @@ describe('Hallucination Fixes (Unit)', () => {
       } as any;
 
       mockOnboardingDetector.check.mockResolvedValue('known');
-      mockAssembler.assemble.mockResolvedValue({ userProfile: { displayName: 'Fred' } });
-      mockFilterAgent.route.mockResolvedValue({ action: 'route', routeTo: 'manager', reason: 'test' });
-      mockManagerAgent.execute.mockResolvedValue({ text: 'Response', agentName: 'manager' });
+      mockAssembler.assemble.mockResolvedValue({
+        userProfile: { displayName: 'Fred' },
+      });
+      mockFilterAgent.route.mockResolvedValue({
+        action: 'route',
+        routeTo: 'manager',
+        reason: 'test',
+      });
+      mockManagerAgent.execute.mockResolvedValue({
+        text: 'Response',
+        agentName: 'manager',
+      });
 
       await processor.process({ id: 'job1', data: { parsedMessage } } as any);
 
       expect(mockManagerAgent.execute).toHaveBeenCalledWith(
         'manager',
         expect.objectContaining({
-          systemBlock: expect.not.stringContaining('VISUAL GROUNDING')
-        })
+          systemBlock: expect.not.stringContaining('VISUAL GROUNDING'),
+        }),
       );
     });
 
@@ -125,8 +149,13 @@ describe('Hallucination Fixes (Unit)', () => {
       } as any;
 
       mockOnboardingDetector.check.mockResolvedValue('known');
-      mockAssembler.assemble.mockResolvedValue({ userProfile: { displayName: 'Fred' } });
-      mockFilterAgent.route.mockResolvedValue({ action: 'reply', reply: 'Direct Filter Reply' });
+      mockAssembler.assemble.mockResolvedValue({
+        userProfile: { displayName: 'Fred' },
+      });
+      mockFilterAgent.route.mockResolvedValue({
+        action: 'reply',
+        reply: 'Direct Filter Reply',
+      });
 
       // Reset manager mock to track calls in this test
       mockManagerAgent.execute.mockClear();
@@ -134,7 +163,11 @@ describe('Hallucination Fixes (Unit)', () => {
       await processor.process({ id: 'job1', data: { parsedMessage } } as any);
 
       // Verify filter reply was saved/sent
-      expect(mockReplySender.sendReply).toHaveBeenCalledWith('123', 'Direct Filter Reply', 1);
+      expect(mockReplySender.sendReply).toHaveBeenCalledWith(
+        '123',
+        'Direct Filter Reply',
+        1,
+      );
 
       // CRITICAL: Verify manager was NEVER called
       expect(mockManagerAgent.execute).not.toHaveBeenCalled();
@@ -148,8 +181,8 @@ describe('Hallucination Fixes (Unit)', () => {
         message: {
           chat: { id: 123 },
           text: '/clear',
-          from: { id: 456 }
-        }
+          from: { id: 456 },
+        },
       } as any;
 
       mockRedisService.client.set.mockResolvedValue('OK'); // Idempotency gate passes
@@ -157,7 +190,10 @@ describe('Hallucination Fixes (Unit)', () => {
       await controller.handleWebhook(update);
 
       expect(mockRedisService.client.del).toHaveBeenCalledWith('hot:123');
-      expect(mockReplySender.sendReply).toHaveBeenCalledWith('123', expect.stringContaining('hot memory cleared'));
+      expect(mockReplySender.sendReply).toHaveBeenCalledWith(
+        '123',
+        expect.stringContaining('hot memory cleared'),
+      );
     });
   });
 });

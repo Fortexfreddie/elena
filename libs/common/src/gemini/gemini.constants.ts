@@ -1,16 +1,16 @@
 export const GEMINI_MODELS = {
-    /** Lite model for routing/filtering — cheapest, fastest, free tier */
-    FILTER: 'gemini-3.1-flash-lite-preview',
-    /** Flash model for general tasks — fast, capable, free tier */
-    FLASH: 'gemini-3-flash-preview',
-    /** Pro model for complex tasks — most capable, free tier */
-    PRO: 'gemini-3.1-pro-preview',
-    /** Primary fallback model when PRO fails */
-    FALLBACK: 'gemini-3-flash-preview',
-    /** Secondary fallback (Lite) when all else fails */
-    FALLBACK_LITE: 'gemini-3.1-flash-lite-preview',
-    /** Embedding model for Qdrant vectors */
-    EMBEDDING: 'gemini-embedding-001',
+  /** Lite model for routing/filtering — cheapest, fastest, free tier */
+  FILTER: 'gemini-3.1-flash-lite-preview',
+  /** Flash model for general tasks — fast, capable, free tier */
+  FLASH: 'gemini-3-flash-preview',
+  /** Pro model for complex tasks — most capable, free tier */
+  PRO: 'gemini-3.1-pro-preview',
+  /** Primary fallback model when PRO fails */
+  FALLBACK: 'gemini-3-flash-preview',
+  /** Secondary fallback (Lite) when all else fails */
+  FALLBACK_LITE: 'gemini-3.1-flash-lite-preview',
+  /** Embedding model for Qdrant vectors */
+  EMBEDDING: 'gemini-embedding-001',
 } as const;
 
 /**
@@ -51,10 +51,37 @@ export const EMBEDDING_CHUNK_MAX_WORDS = 1500;
 
 /** Technical keywords for active listening and routing heuristics */
 export const TECHNICAL_KEYWORDS = [
-    'solana', 'rpc', 'wallet', 'token', 'mint', 'transaction', 'tx',
-    'bug', 'fix', 'error', 'failed', 'issue', 'crash',
-    'flutter', 'nextjs', 'react', 'prisma', 'redis', 'bullmq',
-    'nest', 'api', 'webhook', 'backend', 'frontend',
-    'the chatter project', 'elena', 'bot', 'agent',
-    'bounty', 'task', 'code', 'repo', 'github'
+  'solana',
+  'rpc',
+  'wallet',
+  'token',
+  'mint',
+  'transaction',
+  'tx',
+  'bug',
+  'fix',
+  'error',
+  'failed',
+  'issue',
+  'crash',
+  'flutter',
+  'nextjs',
+  'react',
+  'prisma',
+  'redis',
+  'bullmq',
+  'nest',
+  'api',
+  'webhook',
+  'backend',
+  'frontend',
+  'the chatter project',
+  'elena',
+  'bot',
+  'agent',
+  'bounty',
+  'task',
+  'code',
+  'repo',
+  'github',
 ];

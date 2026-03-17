@@ -7,7 +7,7 @@ import { UpstashRedisService } from './upstash-redis.service';
  */
 @Global()
 @Module({
-    providers: [UpstashRedisService],
-    exports: [UpstashRedisService],
+  providers: [UpstashRedisService],
+  exports: [UpstashRedisService],
 })
-export class UpstashRedisModule { }
+export class UpstashRedisModule {}

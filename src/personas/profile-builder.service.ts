@@ -5,85 +5,101 @@ import { SaveInterviewArgsSchema } from '@app/common/types/agent.types';
 
 @Injectable()
 export class ProfileBuilder {
-    private readonly logger = new Logger(ProfileBuilder.name);
+  private readonly logger = new Logger(ProfileBuilder.name);
 
-    constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
-    /**
-     * Finalizes the onboarding by building the user's persona and updating status.
-     * Called when a founder approves the session.
-     */
-    async finalize(sessionId: string): Promise<void> {
-        try {
-            const session = await this.prisma.onboardingSession.findUnique({
-                where: { id: sessionId },
-            });
+  /**
+   * Finalizes the onboarding by building the user's persona and updating status.
+   * Called when a founder approves the session.
+   */
+  async finalize(sessionId: string): Promise<void> {
+    try {
+      const session = await this.prisma.onboardingSession.findUnique({
+        where: { id: sessionId },
+      });
 
-            if (!session || session.status !== OnboardingSessionStatus.pending_approval) {
-                throw new Error('Onboarding session not found or not in pending_approval state');
-            }
+      if (
+        !session ||
+        session.status !== OnboardingSessionStatus.pending_approval
+      ) {
+        throw new Error(
+          'Onboarding session not found or not in pending_approval state',
+        );
+      }
 
-            const validation = SaveInterviewArgsSchema.safeParse(session.builtProfileJson);
-            if (!validation.success) {
-                this.logger.error(`Validation failed for session ${sessionId}: ${validation.error.message}`);
-                throw new Error('Stored profile data is invalid');
-            }
+      const validation = SaveInterviewArgsSchema.safeParse(
+        session.builtProfileJson,
+      );
+      if (!validation.success) {
+        this.logger.error(
+          `Validation failed for session ${sessionId}: ${validation.error.message}`,
+        );
+        throw new Error('Stored profile data is invalid');
+      }
 
-            const profileData = validation.data;
+      const profileData = validation.data;
 
-            // Update user record: Promote to member and finalize profile
-            await this.prisma.user.update({
-                where: { telegramId: session.telegramId },
-                data: {
-                    displayName: profileData.displayName,
-                    onboardingStatus: OnboardingStatus.approved,
-                    role: 'member', // Promote from guest
-                    personaJson: {
-                        role: profileData.role,
-                        technicalTone: profileData.technicalTone,
-                        summary: profileData.summary,
-                    },
-                },
-            });
+      // Update user record: Promote to member and finalize profile
+      await this.prisma.user.update({
+        where: { telegramId: session.telegramId },
+        data: {
+          displayName: profileData.displayName,
+          onboardingStatus: OnboardingStatus.approved,
+          role: 'member', // Promote from guest
+          personaJson: {
+            role: profileData.role,
+            technicalTone: profileData.technicalTone,
+            summary: profileData.summary,
+          },
+        },
+      });
 
-            // Mark session as approved
-            await this.prisma.onboardingSession.update({
-                where: { id: sessionId },
-                data: { status: OnboardingSessionStatus.approved },
-            });
+      // Mark session as approved
+      await this.prisma.onboardingSession.update({
+        where: { id: sessionId },
+        data: { status: OnboardingSessionStatus.approved },
+      });
 
-            this.logger.log(`[APPROVAL_TRACE] User ${session.telegramId} session approved. Profile finalized: ${JSON.stringify(profileData)}`);
-        } catch (error) {
-            this.logger.error(`Failed to finalize profile for session ${sessionId}`, error);
-            throw error;
-        }
+      this.logger.log(
+        `[APPROVAL_TRACE] User ${session.telegramId} session approved. Profile finalized: ${JSON.stringify(profileData)}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to finalize profile for session ${sessionId}`,
+        error,
+      );
+      throw error;
     }
+  }
 
-    /**
-     * Rejects an onboarding session.
-     */
-    async reject(sessionId: string): Promise<void> {
-        try {
-            await this.prisma.onboardingSession.update({
-                where: { id: sessionId },
-                data: { status: OnboardingSessionStatus.denied },
-            });
+  /**
+   * Rejects an onboarding session.
+   */
+  async reject(sessionId: string): Promise<void> {
+    try {
+      await this.prisma.onboardingSession.update({
+        where: { id: sessionId },
+        data: { status: OnboardingSessionStatus.denied },
+      });
 
-            const session = await this.prisma.onboardingSession.findUnique({
-                where: { id: sessionId },
-            });
+      const session = await this.prisma.onboardingSession.findUnique({
+        where: { id: sessionId },
+      });
 
-            if (session) {
-                await this.prisma.user.update({
-                    where: { telegramId: session.telegramId },
-                    data: { onboardingStatus: OnboardingStatus.denied },
-                });
-            }
+      if (session) {
+        await this.prisma.user.update({
+          where: { telegramId: session.telegramId },
+          data: { onboardingStatus: OnboardingStatus.denied },
+        });
+      }
 
-            this.logger.log(`[APPROVAL_TRACE] Onboarding session ${sessionId} for user ${session?.telegramId} rejected.`);
-        } catch (error) {
-            this.logger.error(`Failed to reject session ${sessionId}`, error);
-            throw error;
-        }
+      this.logger.log(
+        `[APPROVAL_TRACE] Onboarding session ${sessionId} for user ${session?.telegramId} rejected.`,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to reject session ${sessionId}`, error);
+      throw error;
     }
+  }
 }

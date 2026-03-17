@@ -20,7 +20,7 @@ export { semanticChunk } from './utils/semantic-chunk';
 export { withRetry } from './utils/retry';
 export { sleep } from './utils/sleep';
 export {
-    extractRedisHost,
-    extractRedisPort,
-    extractRedisPassword,
+  extractRedisHost,
+  extractRedisPort,
+  extractRedisPassword,
 } from './utils/redis-url';

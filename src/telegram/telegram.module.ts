@@ -9,9 +9,18 @@ import { PersonasModule } from '../personas/personas.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 
 @Module({
-    imports: [forwardRef(() => QueueModule), PersonasModule, forwardRef(() => OnboardingModule)],
-    controllers: [WebhookController],
-    providers: [ReplySenderService, TelegramMediaService, DmDispatcherService, ReactionSenderService],
-    exports: [ReplySenderService, TelegramMediaService, DmDispatcherService],
+  imports: [
+    forwardRef(() => QueueModule),
+    PersonasModule,
+    forwardRef(() => OnboardingModule),
+  ],
+  controllers: [WebhookController],
+  providers: [
+    ReplySenderService,
+    TelegramMediaService,
+    DmDispatcherService,
+    ReactionSenderService,
+  ],
+  exports: [ReplySenderService, TelegramMediaService, DmDispatcherService],
 })
-export class TelegramModule { }
+export class TelegramModule {}

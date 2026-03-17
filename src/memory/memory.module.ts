@@ -7,18 +7,18 @@ import { PrismaModule } from '@app/database';
 import { GeminiModule, UpstashRedisModule } from '@app/common';
 
 @Module({
-    imports: [PrismaModule, GeminiModule, UpstashRedisModule],
-    providers: [
-        HotMemoryService,
-        WarmMemoryService,
-        ColdMemoryService,
-        AssemblerService
-    ],
-    exports: [
-        HotMemoryService,
-        WarmMemoryService,
-        ColdMemoryService,
-        AssemblerService
-    ]
+  imports: [PrismaModule, GeminiModule, UpstashRedisModule],
+  providers: [
+    HotMemoryService,
+    WarmMemoryService,
+    ColdMemoryService,
+    AssemblerService,
+  ],
+  exports: [
+    HotMemoryService,
+    WarmMemoryService,
+    ColdMemoryService,
+    AssemblerService,
+  ],
 })
-export class MemoryModule { }
+export class MemoryModule {}

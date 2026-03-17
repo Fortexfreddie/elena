@@ -1,12 +1,12 @@
 import {
-    Controller,
-    Post,
-    Body,
-    UseGuards,
-    Logger,
-    HttpCode,
-    Inject,
-    forwardRef
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Logger,
+  HttpCode,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { TelegramSecretGuard } from './guards/telegram-secret.guard';
 import { parseMessage } from './message.parser';
@@ -38,209 +38,235 @@ import { UpstashRedisService, escapeHtml, escapeMarkdownV2 } from '@app/common';
  */
 @Controller()
 export class WebhookController {
-    private readonly logger = new Logger(WebhookController.name);
-    private botId: number | null = null;
+  private readonly logger = new Logger(WebhookController.name);
+  private botId: number | null = null;
 
-    constructor(
-        private readonly reactionSender: ReactionSenderService,
-        private readonly replySender: ReplySenderService,
-        private readonly queueService: QueueService,
-        private readonly redisService: UpstashRedisService,
-        private readonly profileBuilder: ProfileBuilder,
-        private readonly prisma: PrismaService,
-        @Inject(forwardRef(() => ClaimAdminCommand))
-        private readonly claimAdmin: ClaimAdminCommand,
-    ) {}
+  constructor(
+    private readonly reactionSender: ReactionSenderService,
+    private readonly replySender: ReplySenderService,
+    private readonly queueService: QueueService,
+    private readonly redisService: UpstashRedisService,
+    private readonly profileBuilder: ProfileBuilder,
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => ClaimAdminCommand))
+    private readonly claimAdmin: ClaimAdminCommand,
+  ) {}
 
-    @Post('/webhook')
-    @UseGuards(TelegramSecretGuard)
-    @HttpCode(200)
-    async handleWebhook(
-        @Body() update: TelegramUpdate,
-    ): Promise<{ ok: boolean }> {
-        const updateId = update.update_id;
+  @Post('/webhook')
+  @UseGuards(TelegramSecretGuard)
+  @HttpCode(200)
+  async handleWebhook(
+    @Body() update: TelegramUpdate,
+  ): Promise<{ ok: boolean }> {
+    const updateId = update.update_id;
 
-        // Step 0: Atomic update_id idempotency gate
-        // SETNX with TTL in a single command — no race condition
-        const isNew = await this.redisService.client.set(`update:${String(updateId)}`, '1', {
-            nx: true,
-            ex: 3600,
-        });
+    // Step 0: Atomic update_id idempotency gate
+    // SETNX with TTL in a single command — no race condition
+    const isNew = await this.redisService.client.set(
+      `update:${String(updateId)}`,
+      '1',
+      {
+        nx: true,
+        ex: 3600,
+      },
+    );
 
-        if (!isNew) {
-            // Duplicate — Telegram retry. Drop silently.
-            return { ok: true };
-        }
-
-        let parsed: any = null;
-        try {
-            // Step 0.5: Check for Callback Queries (Approval Flow)
-            if (update.callback_query) {
-                const callbackData = update.callback_query.data;
-                const fromId = String(update.callback_query.from.id);
-                const chatId = update.callback_query.message?.chat.id;
-
-                if (!chatId) {
-                    this.logger.warn(`Received callback_query from ${fromId} without chat context — dropping`);
-                    return { ok: true };
-                }
-
-                if (callbackData && (callbackData.startsWith('approve_') || callbackData.startsWith('deny_'))) {
-                    this.logger.log(`[APPROVAL_TRACE] Founder ${fromId} clicked approval button: ${callbackData}`);
-                    // 1. Verify founder status
-                    const user = await this.prisma.user.findUnique({
-                        where: { telegramId: fromId },
-                        select: { isFoundingMember: true },
-                    });
-
-                    if (!user?.isFoundingMember) {
-                        this.logger.warn(`Non-founder ${fromId} tried to approve/deny onboarding.`);
-                        return { ok: true };
-                    }
-
-                    // 2. Parse data: "approve_sessionId|displayName"
-                    const [actionWithId, displayName] = callbackData.split('|');
-                    
-                    if (actionWithId.startsWith('approve_')) {
-                        const sessionId = actionWithId.replace('approve_', '');
-                        await this.profileBuilder.finalize(sessionId);
-                        await this.replySender.sendReply(
-                            String(chatId),
-                            `✅ Approved: *${escapeMarkdownV2(displayName)}* is now part of the squad.`,
-                            undefined,
-                            'MarkdownV2',
-                            false
-                        );
-                    } else if (actionWithId.startsWith('deny_')) {
-                        const sessionId = actionWithId.replace('deny_', '');
-                        await this.profileBuilder.reject(sessionId);
-                        await this.replySender.sendReply(
-                            String(chatId),
-                            `❌ Denied: *${escapeMarkdownV2(displayName)}* request rejected.`,
-                            undefined,
-                            'MarkdownV2',
-                            false
-                        );
-                    }
-                    
-                    return { ok: true };
-                }
-            }
-            // Check for HITL commands before parsing
-            const messageText = update.message?.text;
-            if (messageText) {
-                const lower = messageText.toLowerCase();
-                
-                // Hardened HITL command parsing (Phase 4.1)
-                // Matches /confirm_jobId or /cancel_jobId, stops at space or @mention
-                const hitlMatch = lower.match(/^\/(confirm|cancel)_([^\s@]+)/);
-                if (hitlMatch) {
-                    const action = hitlMatch[1];
-                    const jobId = hitlMatch[2];
-                    const processedBy = String(update.message?.from?.id ?? 'unknown');
-
-                    if (action === 'confirm') {
-                        await this.queueService.addHitlResumeJob(jobId, processedBy);
-                    } else {
-                        await this.queueService.addHitlCancelJob(jobId, processedBy);
-                    }
-                    return { ok: true };
-                }
-
-                if (lower === '/claim-admin') {
-                    const from = update.message?.from;
-                    if (from) {
-                        const result = await this.claimAdmin.execute(
-                            String(from.id),
-                            from.first_name,
-                            from.username
-                        );
-                        await this.replySender.sendReply(String(update.message?.chat.id), result, undefined, 'MarkdownV2');
-                    }
-                    return { ok: true };
-                }
-                if (lower === '/clear') {
-                    const chatId = String(update.message?.chat.id);
-                    await this.redisService.client.del(`hot:${chatId}`);
-                    await this.replySender.sendReply(chatId, '🗑️ Elena\'s hot memory cleared. Context reset to Day 1.', undefined, null);
-                    return { ok: true };
-                }
-            }
-
-            // Retrieve eagerly-resolved bot ID
-            if (this.botId === null) {
-                this.botId = this.replySender.getBotId();
-            }
-
-            // Step 2: Parse the update
-            parsed = parseMessage(update, this.botId);
-            if (!parsed) {
-                // Not a processable message (e.g., channel post, bot message)
-                return { ok: true };
-            }
-
-            // --- SECURITY GUARD: Group-First Requirement (Phase 3.13) ---
-            const sender = await this.prisma.user.findUnique({
-                where: { telegramId: parsed.userId },
-                select: { id: true, role: true }
-            });
-
-            if (!parsed.isDm) {
-                // In Groups: Automatically register unknown participants as Guests (Atomic Upsert)
-                const from = update.message?.from || update.callback_query?.from;
-                await this.prisma.user.upsert({
-                    where: { telegramId: parsed.userId },
-                    update: {
-                        username: from?.username || null,
-                    },
-                    create: {
-                        telegramId: parsed.userId,
-                        displayName: from?.first_name || 'Anonymous',
-                        username: from?.username || null,
-                        role: 'guest',
-                    }
-                });
-            } else {
-                // In DMs: If user is unknown (not in DB), ignore them completely
-                if (!sender) {
-                    this.logger.warn(`[SECURITY_TRACE] Ignoring DM from unknown user ${parsed.userId}. (Group-First Guard ACTIVE)`);
-                    return { ok: true };
-                }
-            }
-
-            // Step 3: Stage 1 heuristic gate (zero cost)
-            if (!shouldProcess(parsed)) {
-                return { ok: true };
-            }
-
-            // Step 4: Rate limiting (Phase 2+)
-            // TODO-PHASE2: RateLimiterService check here
-
-            // Step 5: Send thinking reaction
-            if (parsed.rawUpdate.message) {
-                await this.reactionSender.sendThinkingReaction(
-                    parsed.chatId,
-                    parsed.rawUpdate.message.message_id,
-                );
-            }
-
-            // Step 6: Push to BullMQ queue
-            await this.queueService.addMessageJob(parsed);
-
-            return { ok: true };
-        } catch (error: unknown) {
-            // Release the update_id lock so Telegram's retry can get through
-            await this.redisService.client.del(`update:${String(updateId)}`);
-
-            this.logger.error({
-                msg: 'Webhook pipeline error',
-                error,
-                updateId,
-                parsedUserId: parsed?.userId ?? 'unparsed'
-            });
-
-            // Return 200 to prevent Telegram from spamming retries
-            return { ok: true };
-        }
+    if (!isNew) {
+      // Duplicate — Telegram retry. Drop silently.
+      return { ok: true };
     }
+
+    let parsed: any = null;
+    try {
+      // Step 0.5: Check for Callback Queries (Approval Flow)
+      if (update.callback_query) {
+        const callbackData = update.callback_query.data;
+        const fromId = String(update.callback_query.from.id);
+        const chatId = update.callback_query.message?.chat.id;
+
+        if (!chatId) {
+          this.logger.warn(
+            `Received callback_query from ${fromId} without chat context — dropping`,
+          );
+          return { ok: true };
+        }
+
+        if (
+          callbackData &&
+          (callbackData.startsWith('approve_') ||
+            callbackData.startsWith('deny_'))
+        ) {
+          this.logger.log(
+            `[APPROVAL_TRACE] Founder ${fromId} clicked approval button: ${callbackData}`,
+          );
+          // 1. Verify founder status
+          const user = await this.prisma.user.findUnique({
+            where: { telegramId: fromId },
+            select: { isFoundingMember: true },
+          });
+
+          if (!user?.isFoundingMember) {
+            this.logger.warn(
+              `Non-founder ${fromId} tried to approve/deny onboarding.`,
+            );
+            return { ok: true };
+          }
+
+          // 2. Parse data: "approve_sessionId|displayName"
+          const [actionWithId, displayName] = callbackData.split('|');
+
+          if (actionWithId.startsWith('approve_')) {
+            const sessionId = actionWithId.replace('approve_', '');
+            await this.profileBuilder.finalize(sessionId);
+            await this.replySender.sendReply(
+              String(chatId),
+              `✅ Approved: *${escapeMarkdownV2(displayName)}* is now part of the squad.`,
+              undefined,
+              'MarkdownV2',
+              false,
+            );
+          } else if (actionWithId.startsWith('deny_')) {
+            const sessionId = actionWithId.replace('deny_', '');
+            await this.profileBuilder.reject(sessionId);
+            await this.replySender.sendReply(
+              String(chatId),
+              `❌ Denied: *${escapeMarkdownV2(displayName)}* request rejected.`,
+              undefined,
+              'MarkdownV2',
+              false,
+            );
+          }
+
+          return { ok: true };
+        }
+      }
+      // Check for HITL commands before parsing
+      const messageText = update.message?.text;
+      if (messageText) {
+        const lower = messageText.toLowerCase();
+
+        // Hardened HITL command parsing (Phase 4.1)
+        // Matches /confirm_jobId or /cancel_jobId, stops at space or @mention
+        const hitlMatch = lower.match(/^\/(confirm|cancel)_([^\s@]+)/);
+        if (hitlMatch) {
+          const action = hitlMatch[1];
+          const jobId = hitlMatch[2];
+          const processedBy = String(update.message?.from?.id ?? 'unknown');
+
+          if (action === 'confirm') {
+            await this.queueService.addHitlResumeJob(jobId, processedBy);
+          } else {
+            await this.queueService.addHitlCancelJob(jobId, processedBy);
+          }
+          return { ok: true };
+        }
+
+        if (lower === '/claim-admin') {
+          const from = update.message?.from;
+          if (from) {
+            const result = await this.claimAdmin.execute(
+              String(from.id),
+              from.first_name,
+              from.username,
+            );
+            await this.replySender.sendReply(
+              String(update.message?.chat.id),
+              result,
+              undefined,
+              'MarkdownV2',
+            );
+          }
+          return { ok: true };
+        }
+        if (lower === '/clear') {
+          const chatId = String(update.message?.chat.id);
+          await this.redisService.client.del(`hot:${chatId}`);
+          await this.replySender.sendReply(
+            chatId,
+            "🗑️ Elena's hot memory cleared. Context reset to Day 1.",
+            undefined,
+            null,
+          );
+          return { ok: true };
+        }
+      }
+
+      // Retrieve eagerly-resolved bot ID
+      if (this.botId === null) {
+        this.botId = this.replySender.getBotId();
+      }
+
+      // Step 2: Parse the update
+      parsed = parseMessage(update, this.botId);
+      if (!parsed) {
+        // Not a processable message (e.g., channel post, bot message)
+        return { ok: true };
+      }
+
+      // --- SECURITY GUARD: Group-First Requirement (Phase 3.13) ---
+      const sender = await this.prisma.user.findUnique({
+        where: { telegramId: parsed.userId },
+        select: { id: true, role: true },
+      });
+
+      if (!parsed.isDm) {
+        // In Groups: Automatically register unknown participants as Guests (Atomic Upsert)
+        const from = update.message?.from || update.callback_query?.from;
+        await this.prisma.user.upsert({
+          where: { telegramId: parsed.userId },
+          update: {
+            username: from?.username || null,
+          },
+          create: {
+            telegramId: parsed.userId,
+            displayName: from?.first_name || 'Anonymous',
+            username: from?.username || null,
+            role: 'guest',
+          },
+        });
+      } else {
+        // In DMs: If user is unknown (not in DB), ignore them completely
+        if (!sender) {
+          this.logger.warn(
+            `[SECURITY_TRACE] Ignoring DM from unknown user ${parsed.userId}. (Group-First Guard ACTIVE)`,
+          );
+          return { ok: true };
+        }
+      }
+
+      // Step 3: Stage 1 heuristic gate (zero cost)
+      if (!shouldProcess(parsed)) {
+        return { ok: true };
+      }
+
+      // Step 4: Rate limiting (Phase 2+)
+      // TODO-PHASE2: RateLimiterService check here
+
+      // Step 5: Send thinking reaction
+      if (parsed.rawUpdate.message) {
+        await this.reactionSender.sendThinkingReaction(
+          parsed.chatId,
+          parsed.rawUpdate.message.message_id,
+        );
+      }
+
+      // Step 6: Push to BullMQ queue
+      await this.queueService.addMessageJob(parsed);
+
+      return { ok: true };
+    } catch (error: unknown) {
+      // Release the update_id lock so Telegram's retry can get through
+      await this.redisService.client.del(`update:${String(updateId)}`);
+
+      this.logger.error({
+        msg: 'Webhook pipeline error',
+        error,
+        updateId,
+        parsedUserId: parsed?.userId ?? 'unparsed',
+      });
+
+      // Return 200 to prevent Telegram from spamming retries
+      return { ok: true };
+    }
+  }
 }

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
 
 @Module({})
-export class AuditModule { }
+export class AuditModule {}
 // Phase 5 placeholder — providers added in Phase 5

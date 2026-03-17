@@ -10,17 +10,23 @@ import { PersonasInjector } from './personas.injector';
 
 @Injectable()
 export class OnboardingAgent extends BaseAgent {
-    constructor(
-        geminiService: GeminiService,
-        executorService: ExecutorService,
-        private readonly registry: RegistryService,
-        personasInjector: PersonasInjector
-    ) {
-        super('onboarding', GEMINI_MODELS.FLASH, geminiService, executorService, personasInjector);
-    }
+  constructor(
+    geminiService: GeminiService,
+    executorService: ExecutorService,
+    private readonly registry: RegistryService,
+    personasInjector: PersonasInjector,
+  ) {
+    super(
+      'onboarding',
+      GEMINI_MODELS.FLASH,
+      geminiService,
+      executorService,
+      personasInjector,
+    );
+  }
 
-    protected getRoleInstruction(): string {
-        return `You are Elena's Onboarding Agent persona. 
+  protected getRoleInstruction(): string {
+    return `You are Elena's Onboarding Agent persona. 
 You are interviewing a new teammate who wants to join "The Squad". 
 Be warm, professional, and slightly curious.
 
@@ -34,36 +40,38 @@ Guidelines:
 - If you have enough information to form a profile, use the 'save_interview' tool.
 - If they are being evasive or harmful, politely decline and end the session.
 - Once 'save_interview' is called, you must tell the user that "The founders will review your application soon." and end the conversation.`;
-    }
+  }
 
-    protected getTools(): FunctionDeclaration[] {
-        return [
-            {
-                name: 'save_interview',
-                description: 'Save the completed interview data to be reviewed by founders.',
-                parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                        displayName: {
-                            type: Type.STRING,
-                            description: 'The preferred name of the user.'
-                        },
-                        role: {
-                            type: Type.STRING,
-                            description: 'The role or expertise of the user.'
-                        },
-                        technicalTone: {
-                            type: Type.STRING,
-                            description: 'Preferred tone for technical discussions.'
-                        },
-                        summary: {
-                            type: Type.STRING,
-                            description: 'A brief summary of the user and why they are joining.'
-                        }
-                    },
-                    required: ['displayName', 'role', 'technicalTone', 'summary']
-                }
-            }
-        ];
-    }
+  protected getTools(): FunctionDeclaration[] {
+    return [
+      {
+        name: 'save_interview',
+        description:
+          'Save the completed interview data to be reviewed by founders.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            displayName: {
+              type: Type.STRING,
+              description: 'The preferred name of the user.',
+            },
+            role: {
+              type: Type.STRING,
+              description: 'The role or expertise of the user.',
+            },
+            technicalTone: {
+              type: Type.STRING,
+              description: 'Preferred tone for technical discussions.',
+            },
+            summary: {
+              type: Type.STRING,
+              description:
+                'A brief summary of the user and why they are joining.',
+            },
+          },
+          required: ['displayName', 'role', 'technicalTone', 'summary'],
+        },
+      },
+    ];
+  }
 }
