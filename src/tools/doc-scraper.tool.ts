@@ -37,42 +37,45 @@ export class DocScraperTool implements AgentTool {
   ): Promise<ToolResult> {
     const url = args['url'] as string;
 
-    this.logger.log(`Scraping URL: ${url}`);
+    // URL Validation
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return { success: false, error: 'Only HTTP/HTTPS URLs allowed.' };
+      }
+      const blocked = [
+        'localhost',
+        '127.0.0.1',
+        '169.254.169.254',
+        '0.0.0.0',
+        '::1',
+      ];
+      if (blocked.some((b) => parsed.hostname.includes(b))) {
+        return { success: false, error: 'Internal URLs not allowed.' };
+      }
+    } catch {
+      return { success: false, error: 'Invalid URL format.' };
+    }
+
+    this.logger.log(`Scraping URL via Jina: ${url}`);
 
     try {
-      // In a production environment, you might use a service like Jina Reader or a custom playwright instance.
-      // For now, we use a simple fetch + potential future conversion.
-      // Requirement 1: Markdown conversion. We use a simple regex-based or service-based approach if available.
-
-      const response = await got.get(url, {
-        timeout: { request: 10000 },
-        headers: {
-          'User-Agent': 'ElenaSquadBot/1.0 (Research Agent)',
+      const response = await got.get(
+        `https://r.jina.ai/${encodeURIComponent(url)}`,
+        {
+          timeout: { request: 15000 },
+          headers: {
+            'User-Agent': 'ElenaSquadBot/1.0 (Research Agent)',
+            Accept: 'text/markdown',
+          },
         },
-      });
-
-      const contentType = response.headers['content-type'] || '';
-      if (
-        !contentType.includes('text/html') &&
-        !contentType.includes('application/xhtml+xml')
-      ) {
-        return {
-          success: false,
-          error: `URL returned non-HTML content (${contentType}). Cannot scrape.`,
-        };
-      }
-      const body = response.body
-        .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, '')
-        .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, '')
-        .replace(/<[^>]+>/g, ' ') // Strip HTML tags
-        .replace(/\s+/g, ' ') // Normalize whitespace
-        .trim();
+      );
 
       return {
         success: true,
         data: {
           url,
-          content: body,
+          content: response.body,
         },
       };
     } catch (error: unknown) {

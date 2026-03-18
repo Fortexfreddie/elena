@@ -50,12 +50,8 @@ export class RunCodeTool implements AgentTool {
     // In real execution, the HITL controller handles the process.
 
     return {
-      success: true,
-      data: {
-        status: 'simulation_complete',
-        message: `Code execution (${language}) would succeed. Sandbox results would appear here in production.`,
-        codeLength: code.length,
-      },
+      success: false,
+      error: 'Code execution sandbox not yet implemented. Coming in Phase 5.',
     };
   }
 }

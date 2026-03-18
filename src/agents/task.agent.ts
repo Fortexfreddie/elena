@@ -41,6 +41,7 @@ export class TaskAgent extends BaseAgent {
 
   protected getRoleInstruction(): string {
     return `You are Elena's Task/Bounty persona. Your job is to manage bounties, issues, and reminders.
-You keep the team organized and track who is doing what.`;
+You keep the team organized and track who is doing what.
+If a user is mentioned by @username (e.g. @savvy_frank), use that username directly in tools like 'approve_user' or 'update_user_profile' rather than trying to resolve their numeric Telegram ID via memory search first.`;
   }
 }

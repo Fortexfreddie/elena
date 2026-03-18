@@ -49,13 +49,17 @@ CRITICAL: If the user requests a system action (promotion, logs, code, etc.), yo
     // Manager has access to ALL core tools to prevent conversational fluff fallbacks
     return this.registry.getToolDeclarations([
       'delegate_task',
+      'send_dm',
+      'send_reminder',
       'log_monitor',
       'update_user_profile',
       'approve_user',
       'memory_search',
       'web_search',
       'bounty_update',
-      'github_fetch'
+      'github_fetch',
+      'doc_scraper',
+      'run_code',
     ]);
   }
 

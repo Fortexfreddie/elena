@@ -4,6 +4,7 @@ import type { FunctionDeclaration } from '@google/genai';
 import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import { DmDispatcherService } from '../telegram/dm.dispatcher';
+import { PrismaService } from '@app/database';
 
 @Injectable()
 export class SendDmTool implements AgentTool {
@@ -11,10 +12,13 @@ export class SendDmTool implements AgentTool {
 
   name = 'send_dm';
   description =
-    'Send a private direct message to a user. Use this for sensitive info, private confirmations, or when explicitly asked to DM.';
-  requiresConfirmation = false;
+    'Deliver an administrative message or notification directly to a user\'s private chat. Use this for sensitive info, private confirmations, or when explicitly requested by an admin.';
+  requiresConfirmation = true;
 
-  constructor(private readonly dmDispatcher: DmDispatcherService) {}
+  constructor(
+    private readonly dmDispatcher: DmDispatcherService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   getDeclaration(): FunctionDeclaration {
     return {
@@ -47,10 +51,43 @@ export class SendDmTool implements AgentTool {
     this.logger.log(`Executing send_dm to ${targetId}`);
 
     try {
-      await this.dmDispatcher.sendDm(targetId, text);
+      // Security Check: Only admins and superadmins can send DMs through Elena
+      const caller = await this.prisma.user.findUnique({
+        where: { telegramId: context.parsedMessage.userId },
+        select: { role: true },
+      });
+
+      if (!['superadmin', 'admin'].includes(caller?.role ?? '')) {
+        return {
+          success: false,
+          error: 'Only admins and superadmins can send DMs through Elena.',
+        };
+      }
+
+      // Resolve username to numeric ID if needed
+      let actualTargetId = targetId;
+      if (targetId.startsWith('@') || isNaN(Number(targetId))) {
+        const cleanUsername = targetId.startsWith('@')
+          ? targetId.slice(1)
+          : targetId;
+        const user = await this.prisma.user.findFirst({
+          where: { username: { equals: cleanUsername, mode: 'insensitive' } },
+          select: { telegramId: true },
+        });
+
+        if (!user) {
+          return {
+            success: false,
+            error: `User with username @${cleanUsername} not found in my database. I need to have seen them in a group first to index their ID.`,
+          };
+        }
+        actualTargetId = user.telegramId;
+      }
+
+      await this.dmDispatcher.sendDm(actualTargetId, text);
       return {
         success: true,
-        data: { message: `DM sent to ${targetId}` },
+        data: { message: `DM sent to ${targetId} (ID: ${actualTargetId})` },
       };
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);

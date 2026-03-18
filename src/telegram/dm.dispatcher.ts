@@ -15,14 +15,7 @@ export class DmDispatcherService {
    * Send a private DM to a user by their Telegram user ID.
    */
   async sendDm(userId: string, text: string): Promise<void> {
-    try {
-      await this.replySender.sendReply(userId, text);
-      this.logger.log(`DM sent to user ${userId}`);
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown DM error';
-      this.logger.error(`Failed to send DM to ${userId}: ${message}`);
-      // Don't throw — DM failure is non-fatal
-    }
+    await this.replySender.sendReply(userId, text);
+    this.logger.log(`DM sent to user ${userId}`);
   }
 }

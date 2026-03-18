@@ -143,13 +143,26 @@ export class GeminiService {
     response: SDKGenerateContentResponse,
     model: GeminiModel,
   ): ElenaGenerateContentResponse {
+    // Stage 1: Check if the prompt itself was blocked (e.g., PROHIBITED_CONTENT)
+    if (response.promptFeedback?.blockReason) {
+      throw new ModelError(
+        `Gemini blocked the prompt at the source. Reason: ${response.promptFeedback.blockReason}.`,
+      );
+    }
+
+    // Stage 2: Check for empty candidates (often due to safety filters mid-generation)
     if (
       !response.candidates ||
       response.candidates.length === 0 ||
       !response.candidates[0].content
     ) {
+      const finishReason = response.candidates?.[0]?.finishReason;
+      const safetyRatings = JSON.stringify(response.candidates?.[0]?.safetyRatings);
+      
+      this.logger.error(`[SAFETY_DEBUG] Model ${model} returned zero candidates. FinishReason: ${finishReason}. SafetyRatings: ${safetyRatings}`);
+      
       throw new ModelError(
-        `Empty response from ${model} — no candidates returned`,
+        `Empty response from ${model} — likely blocked by safety filters (FinishReason: ${finishReason})`,
       );
     }
 

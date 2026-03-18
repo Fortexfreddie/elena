@@ -380,6 +380,9 @@ export class MessageProcessor extends WorkerHost {
             response.text,
             parsedMessage.rawUpdate.message?.message_id,
           );
+          this.logger.log(
+            `[RESPONSE_TRACE] Elena (${decision.routeTo}) sending: ${response.text.slice(0, 150)}${response.text.length > 150 ? '...' : ''}`,
+          );
 
           const textToStore = response.text?.trim();
           if (textToStore && textToStore.length > 0) {

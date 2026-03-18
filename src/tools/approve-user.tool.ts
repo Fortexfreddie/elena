@@ -14,16 +14,18 @@ export class ApproveUserTool implements AgentTool {
 
   name = 'approve_user';
   description = 'Approve a pending user request to join the squad. Use this when a founder says "let them in" or "approve ofe".';
-  requiresConfirmation = false;
+  requiresConfirmation = true;
 
   argsSchema = z.object({
-    targetUserId: z.string().describe('The Telegram ID of the user to approve.'),
+    targetUserId: z
+      .string()
+      .describe('The Telegram ID or @username of the user to approve.'),
   });
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly profileBuilder: ProfileBuilder,
-  ) {}
+  ) { }
 
   getDeclaration(): FunctionDeclaration {
     return {
@@ -34,7 +36,7 @@ export class ApproveUserTool implements AgentTool {
         properties: {
           targetUserId: {
             type: Type.STRING,
-            description: 'The Telegram ID of the user to approve.',
+            description: 'The Telegram ID or @username of the user to approve.',
           },
         },
         required: ['targetUserId'],
@@ -74,7 +76,10 @@ export class ApproveUserTool implements AgentTool {
           select: { telegramId: true },
         });
         if (!user) {
-          return { success: false, error: `User with username @${cleanUsername} not found in the database.` };
+          return {
+            success: false,
+            error: `User with username @${cleanUsername} not found in my database. I need them to join the group and send me a message here in the group, while I'm active so I can index their Telegram ID before I can approve them.`,
+          };
         }
         actualTargetId = user.telegramId;
       }

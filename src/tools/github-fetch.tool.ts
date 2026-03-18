@@ -53,11 +53,6 @@ export class GithubFetchTool implements AgentTool {
             description:
               'The file path relative to repo root (required for get_file).',
           },
-          issue_number: {
-            type: Type.NUMBER,
-            description:
-              'The issue number (required for get_issue - planned for future actions).',
-          },
         },
         required: ['owner', 'repo', 'action'],
       },
@@ -134,9 +129,14 @@ export class GithubFetchTool implements AgentTool {
           }
 
           if ('content' in data && data.encoding === 'base64') {
-            const content = Buffer.from(data.content, 'base64').toString(
-              'utf8',
-            );
+            let content = Buffer.from(data.content, 'base64').toString('utf8');
+
+            if (content.length > 10000) {
+              content =
+                content.slice(0, 10000) +
+                '\n[FILE TRUNCATED — request a specific line range or smaller file]';
+            }
+
             return {
               success: true,
               data: { content },

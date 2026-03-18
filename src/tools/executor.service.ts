@@ -4,7 +4,7 @@ import type { FunctionCall } from '@google/genai';
 import { RegistryService } from './registry.service';
 import type { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import { TOOL_RESULT_MAX_CHARS } from '@app/common/gemini/gemini.constants';
-import { UpstashRedisService } from '@app/common';
+import { UpstashRedisService, escapeHtml } from '@app/common';
 import { ReplySenderService } from '../telegram/reply.sender';
 
 @Injectable()
@@ -75,17 +75,17 @@ export class ExecutorService {
 
       // Send proposal message to Telegram
       const argsSummary = Object.entries(call.args as any)
-        .map(([k, v]) => `• *${k}*: \`${String(v)}\``)
+        .map(([k, v]) => `• <b>${k}</b>: <code>${escapeHtml(String(v))}</code>`)
         .join('\n');
 
-      const proposal = `⚠️ *Action Proposed: ${toolName}*\n\nDetails:\n${argsSummary}\n\nTo execute this, reply with:\n\`/confirm_${jobId}\`\n\nTo cancel:\n\`/cancel_${jobId}\``;
+      const proposal = `⚠️ <b>Action Proposed: ${toolName}</b>\n\nDetails:\n${argsSummary}\n\nTo execute this, reply with:\n<code>/confirm_${jobId}</code>\n\nTo cancel:\n<code>/cancel_${jobId}</code>`;
 
       await this.replySender.sendReply(
         context.parsedMessage.chatId,
         proposal,
         context.parsedMessage.rawUpdate.message?.message_id,
-        'MarkdownV2',
-        false, // Don't auto-escape, we manually formatted it above
+        'HTML',
+        false, // Already manually escaped with escapeHtml
       );
 
 

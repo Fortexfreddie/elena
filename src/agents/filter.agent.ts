@@ -27,7 +27,7 @@ export class FilterAgent {
   constructor(
     private readonly geminiService: GeminiService,
     private readonly personasInjector: PersonasInjector,
-  ) {}
+  ) { }
 
   /**
    * Route the message to the appropriate action.
@@ -139,6 +139,17 @@ ${contextLines ? `Recent context:\n${contextLines}\n\n` : ''}New message from us
         reason: decisionJson.reason as string,
       };
     } catch (error: unknown) {
+      const isSafetyBlock = error instanceof ModelError && error.message.includes('PROHIBITED_CONTENT');
+      
+      if (isSafetyBlock) {
+        this.logger.warn(`Filter agent hit PROHIBITED_CONTENT. Returning safety rejection reply.`);
+        return {
+          action: 'reply',
+          reply: "I'm sorry, my safety filters blocked that request. I can't process it as it's currently phrased—maybe try rephrasing or removing specific handles?",
+          reason: 'PROHIBITED_CONTENT safety block fallback',
+        };
+      }
+
       if (error instanceof ModelError) {
         this.logger.error(`Filter agent model error: ${error.message}`);
       } else {

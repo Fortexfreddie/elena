@@ -40,8 +40,19 @@ export class SendReminderTool implements AgentTool {
             type: Type.NUMBER,
             description: 'How many minutes from now to send the reminder.',
           },
+          targetType: {
+            type: Type.STRING,
+            enum: ['group', 'dm'],
+            description:
+              'Where to send the reminder. group = current chat, dm = private DM to a user.',
+          },
+          targetUserId: {
+            type: Type.STRING,
+            description:
+              'Telegram user ID to DM (required when targetType is dm).',
+          },
         },
-        required: ['reminderText', 'minutesFromNow'],
+        required: ['reminderText', 'minutesFromNow', 'confirmationMessage'],
       },
     };
   }
@@ -51,13 +62,22 @@ export class SendReminderTool implements AgentTool {
     context: AgentContext,
   ): Promise<ToolResult> {
     const text = args['reminderText'] as string;
-    const conf =
-      (args['confirmationMessage'] as string) ?? 'Got it. I will remind you.';
+    const conf = args['confirmationMessage'] as string;
     const mins = args['minutesFromNow'] as number;
+    const targetType = (args['targetType'] as string) ?? 'group';
+    const targetUserId = args['targetUserId'] as string | undefined;
+
     const userId = context.assembledContext.userProfile?.id;
     const chatId = context.parsedMessage.chatId;
 
     if (!userId) return { success: false, error: 'User not found.' };
+
+    if (!mins || mins <= 0 || mins > 525600) {
+      return {
+        success: false,
+        error: 'minutesFromNow must be between 1 and 525600 (1 year max)',
+      };
+    }
 
     this.logger.log(`Scheduling reminder for user ${userId} in ${mins} mins`);
 
@@ -67,10 +87,12 @@ export class SendReminderTool implements AgentTool {
       const reminder = await this.prisma.reminder.create({
         data: {
           userId,
-          chatId,
+          chatId: targetType === 'dm' && targetUserId ? targetUserId : chatId,
           reminderMessage: text,
           confirmationMessage: conf,
           scheduledFor,
+          targetType: targetType ?? 'group',
+          targetUserId: targetType === 'dm' ? targetUserId : null,
         },
       });
 

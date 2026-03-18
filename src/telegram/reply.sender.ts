@@ -123,6 +123,7 @@ export class ReplySenderService implements OnModuleInit {
           this.logger.error(
             `Failed to send reply chunk ${i + 1}/${chunks.length} to chat ${chatId} (even with fallback): ${message}`,
           );
+          throw fallbackError;
         }
       }
     }

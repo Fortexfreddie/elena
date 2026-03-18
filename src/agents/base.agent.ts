@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { GeminiService } from '@app/common/gemini/gemini.service';
+import { ModelError } from '@app/common/types/errors';
 import type {
   AgentContext,
   AgentResponse,
@@ -196,6 +197,20 @@ export abstract class BaseAgent {
             : undefined,
       };
     } catch (error: unknown) {
+      const isSafetyBlock = error instanceof ModelError && error.message.includes('PROHIBITED_CONTENT');
+      
+      if (isSafetyBlock) {
+        this.logger.warn(`Agent ${this.name} hit PROHIBITED_CONTENT block. Returning safety rejection.`);
+        return {
+          text: "I'm sorry, my safety filters blocked my reasoning for this task. I can't proceed with that specific request as it is currently phrased.",
+          agentName: this.name,
+          modelUsed: this.defaultModel,
+          latencyMs: Date.now() - startTime,
+          confidence: 0,
+          toolsCalled,
+        };
+      }
+
       this.logger.error(`Execution failed for ${this.name}: ${error}`);
       throw error;
     }

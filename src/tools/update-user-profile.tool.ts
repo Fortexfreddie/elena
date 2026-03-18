@@ -45,7 +45,11 @@ export class UpdateUserProfileTool implements AgentTool {
     args: Record<string, unknown>,
     context: AgentContext,
   ): Promise<ToolResult> {
-    const { targetUserId, displayName, role, summary, technicalTone } = args as any;
+    const targetUserId = args['targetUserId'] as string;
+    const displayName = args['displayName'] as string | undefined;
+    const role = args['role'] as string | undefined;
+    const summary = args['summary'] as string | undefined;
+    const technicalTone = args['technicalTone'] as string | undefined;
     const requester = context.assembledContext.userProfile;
 
     if (!requester) {
@@ -142,13 +146,7 @@ export class UpdateUserProfileTool implements AgentTool {
 
     if (summary) newPersona.summary = summary;
     if (technicalTone) newPersona.technicalTone = technicalTone;
-    
-    // Note: The 'role' field inside personaJson is a duplication of the main 'role' column 
-    // but we keep them in sync for persona consistency.
-    if (role) {
-      newPersona.role = role;
-    }
-    
+
     updateData.personaJson = newPersona;
 
     // Role and Onboarding Logic

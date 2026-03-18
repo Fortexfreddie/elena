@@ -147,6 +147,8 @@ model OnboardingSession {
 model Reminder {
   id                  String    @id @default(uuid())
   chatId              String
+  targetType          String    @default("group")
+  targetUserId        String?
   confirmationMessage String
   reminderMessage     String
   scheduledFor        DateTime

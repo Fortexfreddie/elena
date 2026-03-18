@@ -12,7 +12,6 @@ import { DocScraperTool } from './doc-scraper.tool';
 import { BountyUpdateTool } from './bounty-update.tool';
 import { SendDmTool } from './send-dm.tool';
 import { SendReminderTool } from './send-reminder.tool';
-import { DraftMessageTool } from './draft-message.tool';
 import { RunCodeTool } from './run-code.tool';
 import { WebSearchTool } from './web-search.tool';
 import { LogMonitorTool } from './log-monitor.tool';
@@ -41,7 +40,6 @@ export class RegistryService implements OnModuleInit {
     private readonly sendDmTool: SendDmTool,
     @Inject(forwardRef(() => SendReminderTool))
     private readonly sendReminderTool: SendReminderTool,
-    private readonly draftMessageTool: DraftMessageTool,
     private readonly runCodeTool: RunCodeTool,
     private readonly webSearchTool: WebSearchTool,
     private readonly logMonitorTool: LogMonitorTool,
@@ -59,7 +57,6 @@ export class RegistryService implements OnModuleInit {
     this.registerTool(this.bountyUpdateTool);
     this.registerTool(this.sendDmTool);
     this.registerTool(this.sendReminderTool);
-    this.registerTool(this.draftMessageTool);
     this.registerTool(this.runCodeTool);
     this.registerTool(this.webSearchTool);
     this.registerTool(this.logMonitorTool);

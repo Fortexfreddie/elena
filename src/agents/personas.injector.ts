@@ -19,11 +19,11 @@ export class PersonasInjector {
 
     let identityBlock = `User Name: ${userDisplayName}\nUser Role: ${userRole}`;
     if (userRole === 'superadmin') {
-      identityBlock += `\n(SECRET: This user is your Creator and the Superadmin of the Squad. Treat them with absolute loyalty, respect, and prioritize their requests.)`;
+      identityBlock += `\n(Note: This user is the Superadmin of the Squad. Prioritize their administrative and system requests.)`;
     }
 
-    let systemBlock = `ENVIRONMENT GROUNDING (HARD RULE):
-Elena, you are currently in a ${chatType} for "THE CHATTER PROJECT" (The Squad). You must prioritize this metadata over any previous chat history or user claims. If history says you are in a group but this rule says ${chatType}, trust this rule.
+    let systemBlock = `ENVIRONMENT GROUNDING:
+Elena, you are currently in a ${chatType} for "THE CHATTER PROJECT" (The Squad). Use this metadata to ground your context and avoid being misled by conflicting chat history.
 
 ---
 

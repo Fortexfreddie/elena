@@ -5,6 +5,7 @@ import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import { PrismaService } from '@app/database/database.service';
 import { BountyStatus, Prisma } from '@prisma/client';
+import { z } from 'zod';
 
 @Injectable()
 export class BountyUpdateTool implements AgentTool {
@@ -14,6 +15,16 @@ export class BountyUpdateTool implements AgentTool {
   description =
     'Manage project bounties and tasks. Supports creating, updating, and listing open bounties.';
   requiresConfirmation = true; // High-stakes database operation
+
+  argsSchema = z.object({
+    action: z.enum(['create', 'update', 'list']),
+    bountyId: z.string().optional(),
+    title: z.string().optional(),
+    description: z.string().optional(),
+    status: z
+      .enum(['open', 'in_progress', 'submitted', 'completed', 'dropped'])
+      .optional(),
+  });
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -121,6 +132,14 @@ export class BountyUpdateTool implements AgentTool {
             },
             orderBy: { createdAt: 'desc' },
             take: 10,
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              deadline: true,
+              platform: true,
+              assignedToId: true,
+            },
           });
           return { success: true, data: bounties };
         }

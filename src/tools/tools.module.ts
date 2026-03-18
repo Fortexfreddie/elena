@@ -7,7 +7,6 @@ import { DocScraperTool } from './doc-scraper.tool';
 import { BountyUpdateTool } from './bounty-update.tool';
 import { SendDmTool } from './send-dm.tool';
 import { SendReminderTool } from './send-reminder.tool';
-import { DraftMessageTool } from './draft-message.tool';
 import { RunCodeTool } from './run-code.tool';
 import { WebSearchTool } from './web-search.tool';
 import { LogMonitorTool } from './log-monitor.tool';
@@ -39,7 +38,6 @@ import { forwardRef } from '@nestjs/common';
     BountyUpdateTool,
     SendDmTool,
     SendReminderTool,
-    DraftMessageTool,
     RunCodeTool,
     WebSearchTool,
     LogMonitorTool,
