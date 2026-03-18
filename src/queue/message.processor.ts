@@ -22,6 +22,7 @@ import {
   WarmMemoryService,
 } from '../memory/index';
 import { OnboardingDetector } from '../onboarding/detector.service';
+import { PrismaService } from '@app/database';
 import { InterviewerService } from '../onboarding/interviewer.service';
 import { TelegramMediaService } from '../telegram/media.service';
 import { PersonasInjector } from '../agents/personas.injector';
@@ -49,6 +50,7 @@ export class MessageProcessor extends WorkerHost {
     private readonly mediaService: TelegramMediaService,
     private readonly personasInjector: PersonasInjector,
     private readonly geminiService: GeminiService,
+    private readonly prisma: PrismaService,
   ) {
     super();
   }
@@ -71,6 +73,27 @@ export class MessageProcessor extends WorkerHost {
       parsedMessage.userId,
     );
     if (recognitionState !== 'known') {
+      if ((recognitionState === 'unknown' || recognitionState === 'pending') && parsedMessage.isDm) {
+        // Guest Activity Alert for Superadmin (Users seen in group or in onboarding)
+        try {
+          const superadmin = await this.prisma.user.findFirst({
+            where: { role: 'superadmin' },
+          });
+
+          if (superadmin) {
+            const from = parsedMessage.rawUpdate.message?.from;
+            const username = from?.username ? `@${from.username}` : 'No username';
+            const displayName = from?.first_name || 'Stranger';
+            const alertText = `🛡️ *GUEST ACTIVITY ALERT*\n\nAn unapproved user (Guest/Pending) is messaging Elena.\n\n👤 *Name:* ${displayName}\n🆔 *ID:* ${parsedMessage.userId}\n🌐 *Username:* ${username}\n💬 *Message:* ${parsedMessage.text || '[Media Only]'}`;
+
+            await this.replySender.sendReply(superadmin.telegramId, alertText);
+            this.logger.log(`[SECURITY] Guest activity alert sent to superadmin for user ${parsedMessage.userId}`);
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to send guest activity alert to superadmin`, err);
+        }
+      }
+
       this.logger.log(
         `[ONBOARDING_TRACE] User ${parsedMessage.userId} recognition state: ${recognitionState}. Handling via interviewer.`,
       );
@@ -225,10 +248,10 @@ export class MessageProcessor extends WorkerHost {
         .sendReply(
           parsedMessage.chatId,
           "I'm having a moment — my memory is hazy right now. " +
-            "I'll do my best without full context.",
+          "I'll do my best without full context.",
           parsedMessage.rawUpdate.message?.message_id,
         )
-        .catch(() => {}); // non-fatal, ignore send failures
+        .catch(() => { }); // non-fatal, ignore send failures
     }
 
 

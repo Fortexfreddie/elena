@@ -230,6 +230,30 @@ export class WebhookController {
           this.logger.warn(
             `[SECURITY_TRACE] Ignoring DM from unknown user ${parsed.userId}. (Group-First Guard ACTIVE)`,
           );
+
+          // Stranger Alert for Superadmin (Security Notification)
+          try {
+            const superadmin = await this.prisma.user.findFirst({
+              where: { role: 'superadmin' },
+            });
+
+            if (superadmin) {
+              const from = update.message?.from;
+              const username = from?.username
+                ? `@${from.username}`
+                : 'No username';
+              const displayName = from?.first_name || 'Stranger';
+              const alertText = `🛡️ *STRANGER ALERT (BLOCKED)*\n\nA total stranger attempted to DM Elena. They were silently ignored due to Group-First Guard.\n\n👤 *Name:* ${displayName}\n🆔 *ID:* ${parsed.userId}\n🌐 *Username:* ${username}\n💬 *Message:* ${parsed.text || '[Media Only]'}`;
+
+              await this.replySender.sendReply(superadmin.telegramId, alertText);
+              this.logger.log(
+                `[SECURITY] Stranger alert sent to superadmin for blocked user ${parsed.userId}`,
+              );
+            }
+          } catch (err) {
+            this.logger.warn(`Failed to send stranger alert to superadmin`, err);
+          }
+
           return { ok: true };
         }
       }

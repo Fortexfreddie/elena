@@ -132,7 +132,12 @@ export class ExecutorService {
         };
       }
 
-      this.logger.log(`[TOOL_TRACE] ${toolName} finished with success: ${result.success}`);
+      const serializedForLog = JSON.stringify(result.data);
+      const logSnippet = serializedForLog && serializedForLog.length > 1000
+        ? serializedForLog.slice(0, 1000) + '... [output too long for terminal]'
+        : serializedForLog;
+
+      this.logger.log(`[TOOL_TRACE] ${toolName} finished with success: ${result.success}. Result: ${logSnippet}`);
 
       return {
         ...result,
