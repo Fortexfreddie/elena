@@ -25,6 +25,8 @@ export interface ParsedMessage {
   mediaFileSize: number | null;
   /** MIME type string, e.g. 'image/jpeg', 'audio/ogg' — null if no media */
   mediaType: string | null;
+  /** Whether the media is a Telegram sticker */
+  isSticker: boolean;
   /** Context if this is a reply to another message */
   replyToContext: {
     text: string | null;
@@ -73,6 +75,7 @@ export interface TelegramMessage {
   video?: TelegramVideo;
   video_note?: TelegramVideoNote;
   document?: TelegramDocument;
+  sticker?: TelegramSticker;
 }
 
 export interface MessageEntity {
@@ -139,5 +142,16 @@ export interface TelegramDocument {
   file_unique_id: string;
   file_name?: string;
   mime_type?: string;
+  file_size?: number;
+}
+
+export interface TelegramSticker {
+  file_id: string;
+  file_unique_id: string;
+  type: 'regular' | 'mask' | 'custom_emoji';
+  width: number;
+  height: number;
+  is_animated: boolean;
+  is_video: boolean;
   file_size?: number;
 }

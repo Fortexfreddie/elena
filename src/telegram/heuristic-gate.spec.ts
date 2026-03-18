@@ -16,6 +16,7 @@ describe('HeuristicGate', () => {
     mediaType: null,
     rawUpdate: {} as any,
     replyToContext: null,
+    isSticker: false,
   };
 
   it('should pass if it is a DM', () => {

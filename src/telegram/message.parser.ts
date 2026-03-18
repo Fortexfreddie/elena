@@ -78,6 +78,7 @@ export function parseMessage(
     mediaFileId: media.fileId,
     mediaFileSize: media.fileSize,
     mediaType: media.mimeType,
+    isSticker: media.isSticker,
     replyToContext: replyContext,
     rawUpdate: update,
   };
@@ -99,6 +100,7 @@ interface MediaExtraction {
   fileSize: number | null;
   mimeType: string | null;
   oversizeNote: string | null;
+  isSticker: boolean;
 }
 
 function extractMedia(message: TelegramMessage): MediaExtraction {
@@ -108,6 +110,7 @@ function extractMedia(message: TelegramMessage): MediaExtraction {
     fileSize: null,
     mimeType: null,
     oversizeNote: null,
+    isSticker: false,
   };
 
   // Photo — array of sizes, pick the largest (last element)
@@ -128,6 +131,7 @@ function extractMedia(message: TelegramMessage): MediaExtraction {
       fileSize,
       mimeType: 'image/jpeg', // PhotoSize has NO mime_type field
       oversizeNote: null,
+      isSticker: false,
     };
   }
 
@@ -148,6 +152,7 @@ function extractMedia(message: TelegramMessage): MediaExtraction {
       fileSize,
       mimeType: message.voice.mime_type ?? 'audio/ogg',
       oversizeNote: null,
+      isSticker: false,
     };
   }
 
@@ -168,6 +173,7 @@ function extractMedia(message: TelegramMessage): MediaExtraction {
       fileSize,
       mimeType: message.video.mime_type ?? 'video/mp4',
       oversizeNote: null,
+      isSticker: false,
     };
   }
 
@@ -188,6 +194,7 @@ function extractMedia(message: TelegramMessage): MediaExtraction {
       fileSize,
       mimeType: 'video/mp4', // VideoNote has NO mime_type field
       oversizeNote: null,
+      isSticker: false,
     };
   }
 
@@ -208,6 +215,37 @@ function extractMedia(message: TelegramMessage): MediaExtraction {
       fileSize,
       mimeType: message.document.mime_type ?? 'application/octet-stream',
       oversizeNote: null,
+      isSticker: false,
+    };
+  }
+
+  // Sticker
+  if (message.sticker) {
+    const fileSize = message.sticker.file_size ?? null;
+
+    if (fileSize !== null && fileSize > TWENTY_MB) {
+      return {
+        ...noMedia,
+        oversizeNote: '[System: sticker too large to process (>20MB)]',
+      };
+    }
+
+    // Static stickers are often WebP. Video stickers are WEBM.
+    // Animated stickers (TGS) are not supported by Gemini.
+    if (message.sticker.is_animated) {
+      return {
+        ...noMedia,
+        oversizeNote: '[System: animated stickers (TGS) are not supported yet]',
+      };
+    }
+
+    return {
+      hasMedia: true,
+      fileId: message.sticker.file_id,
+      fileSize,
+      mimeType: message.sticker.is_video ? 'video/webm' : 'image/webp',
+      oversizeNote: null,
+      isSticker: true,
     };
   }
 

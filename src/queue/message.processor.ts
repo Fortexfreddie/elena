@@ -146,39 +146,59 @@ export class MessageProcessor extends WorkerHost {
       }
     }
 
-    let imageContextText: string | undefined = undefined;
+    let mediaContextText: string | undefined = undefined;
     if (mediaContent) {
       try {
         this.logger.log(`Extracting textual context from media for job ${job.id}`);
-        const imageContextResponse = await this.geminiService.generateContent(
+        const isAudio =
+          (mediaContent.inlineData?.mimeType?.startsWith('audio/') ||
+            mediaContent.fileData?.mimeType?.startsWith('audio/')) ??
+          false;
+        const isVideo =
+          (mediaContent.inlineData?.mimeType?.startsWith('video/') ||
+            mediaContent.fileData?.mimeType?.startsWith('video/')) ??
+          false;
+        const isSticker = parsedMessage.isSticker;
+
+        let prompt = 'Describe this image in 2-3 sentences. Be literal and technical.';
+        let systemInstruction =
+          'You are a media context extractor. Be concise and literal. Focus on the content visible or audible in the provided media.';
+
+        if (isAudio) {
+          prompt = 'Transcribe or summarize this audio. Be literal and capture the speaker\'s intent.';
+        } else if (isSticker) {
+          prompt = 'Identify or describe this sticker/emoji. What feeling or character does it show?';
+        } else if (isVideo) {
+          prompt = 'Describe this video in 2-3 sentences. Be literal and focus on actions/movement.';
+        }
+
+        const mediaContextResponse = await this.geminiService.generateContent(
           GEMINI_MODELS.FLASH,
           [
             {
               role: 'user',
-              parts: [
-                { text: 'Describe this image in 2-3 sentences. Be literal and technical.' },
-                mediaContent,
-              ],
+              parts: [{ text: prompt }, mediaContent],
             },
           ],
           {
-            systemInstruction: 'You are a visual context extractor. Be concise and literal. Focus on technical details visible in the image.',
+            systemInstruction:
+              'You are a media context extractor. Be concise and literal. Focus on the content visible or audible in the provided media.',
           },
         );
-        imageContextText = imageContextResponse.text?.trim();
-        this.logger.debug(`Extracted image context: ${imageContextText}`);
+        mediaContextText = mediaContextResponse.text?.trim();
+        this.logger.debug(`Extracted media context: ${mediaContextText}`);
       } catch (err) {
-        this.logger.warn(`Failed to extract image context`, err);
+        this.logger.warn(`Failed to extract media context`, err);
       }
     }
 
     let assembledContext: AssembledContext | undefined;
     try {
       let memoryStoreText = effectiveText ?? '';
-      if (imageContextText) {
-        memoryStoreText = memoryStoreText 
-          ? `${memoryStoreText}\n\n[Image context: ${imageContextText}]` 
-          : `[Image context: ${imageContextText}]`;
+      if (mediaContextText) {
+        memoryStoreText = memoryStoreText
+          ? `${memoryStoreText}\n\n[Media context: ${mediaContextText}]`
+          : `[Media context: ${mediaContextText}]`;
       } else if (!effectiveText) {
         memoryStoreText = '[media]';
       }
@@ -291,8 +311,8 @@ export class MessageProcessor extends WorkerHost {
         const agentContext: AgentContext = {
           parsedMessage: {
             ...parsedMessage,
-            text: imageContextText 
-              ? `${effectiveText || ''}\n\n[Image context: ${imageContextText}]`
+            text: mediaContextText
+              ? `${effectiveText || ''}\n\n[Media context: ${mediaContextText}]`
               : effectiveText,
           },
           assembledContext: context,

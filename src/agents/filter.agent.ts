@@ -86,7 +86,7 @@ ${contextLines ? `Recent context:\n${contextLines}\n\n` : ''}New message from us
         contents[0].parts.push(mediaContent);
       }
 
-      const personaBlock = await this.personasInjector.buildForFilter(parsed, userProfile);
+      const personaBlock = await this.personasInjector.buildForFilter(parsed, userProfile, mediaContent);
 
       const response = await this.geminiService.generateContent(
         GEMINI_MODELS.FILTER,

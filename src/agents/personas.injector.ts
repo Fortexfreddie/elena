@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AgentContext } from '@app/common/types/agent.types';
+import type { Part } from '@google/genai';
 
 @Injectable()
 export class PersonasInjector {
@@ -50,8 +51,20 @@ GLOBAL RULES:
 `;
 
     if (context.mediaContent) {
-      systemBlock = `VISUAL GROUNDING (ACTIVE — image verified):
-Your response must be grounded in literal visual observation of the provided image. Chat history and project context are secondary. If history says one thing but the image shows another, trust the image.
+      const isAudio =
+        (context.mediaContent.inlineData?.mimeType?.startsWith('audio/') ||
+          context.mediaContent.fileData?.mimeType?.startsWith('audio/')) ??
+        false;
+      const isVideo =
+        (context.mediaContent.inlineData?.mimeType?.startsWith('video/') ||
+          context.mediaContent.fileData?.mimeType?.startsWith('video/')) ??
+        false;
+
+      const groundingType = isAudio ? 'AUDITORY' : isVideo ? 'VIDEO' : 'VISUAL';
+      const mediaType = isAudio ? 'audio' : isVideo ? 'video' : 'image/sticker';
+
+      systemBlock = `${groundingType} GROUNDING (ACTIVE — ${mediaType} detected):
+Trust literal ${isAudio ? 'auditory' : 'visual'} observation over chat history.
 
 ---
 
@@ -68,6 +81,7 @@ ${systemBlock}`;
   async buildForFilter(
     parsed: import('@app/common/types/telegram.types').ParsedMessage,
     userProfile?: any,
+    mediaContent?: Part,
   ): Promise<string> {
     const userDisplayName = userProfile?.displayName || 'User';
     const userRole = userProfile?.role || 'Guest';
@@ -77,7 +91,7 @@ ${systemBlock}`;
       identityBlock += `\n(SECRET: This user is your Creator and the Superadmin. Treat them with absolute loyalty.)`;
     }
 
-    return `You are Elena. Female, warm, direct, sharp. Part of THE CHATTER PROJECT.
+    let systemBlock = `You are Elena. Female, warm, direct, sharp. Part of THE CHATTER PROJECT.
 ${identityBlock}
 Adapt tone per user. Kind always. Celebrate wins.
 Chat type: ${parsed.isDm ? 'Private DM' : 'Group Chat'}
@@ -85,6 +99,28 @@ Chat type: ${parsed.isDm ? 'Private DM' : 'Group Chat'}
 ROUTING POLICY: 
 You are a high-speed router. If a request involves system actions, logs, code, or squad management, DO NOT reply yourself. You lack the tools. You must specify 'route' to the appropriate agent.`;
 
+    if (mediaContent) {
+      const isAudio =
+        (mediaContent.inlineData?.mimeType?.startsWith('audio/') ||
+          mediaContent.fileData?.mimeType?.startsWith('audio/')) ??
+        false;
+      const isVideo =
+        (mediaContent.inlineData?.mimeType?.startsWith('video/') ||
+          mediaContent.fileData?.mimeType?.startsWith('video/')) ??
+        false;
+
+      const groundingType = isAudio ? 'AUDITORY' : isVideo ? 'VIDEO' : 'VISUAL';
+      const mediaType = isAudio ? 'audio' : isVideo ? 'video' : 'image/sticker';
+
+      systemBlock = `${groundingType} GROUNDING (ACTIVE — ${mediaType} detected):
+Trust literal ${isAudio ? 'auditory' : 'visual'} observation over chat history.
+
+---
+
+${systemBlock}`;
+    }
+
+    return systemBlock;
   }
 
 }
