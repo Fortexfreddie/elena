@@ -11,7 +11,7 @@ export class SendReminderTool implements AgentTool {
   private readonly logger = new Logger(SendReminderTool.name);
 
   name = 'send_reminder';
-  description = 'Schedule a reminder. In DM conversations always use targetType="dm" and set targetUserId to the requester telegram ID from context. In group conversations use targetType="group".';
+  description = 'Schedule a reminder. Use targetType="group" to deliver in the current chat (default, always safe). Use targetType="dm" only when the user explicitly requests a private reminder — in that case targetUserId MUST be a numeric Telegram ID from context, never a display name.';
   requiresConfirmation = false;
 
   constructor(
@@ -49,7 +49,7 @@ export class SendReminderTool implements AgentTool {
           targetUserId: {
             type: Type.STRING,
             description:
-              'Telegram user ID to DM (required when targetType is dm).',
+              'Numeric Telegram user ID ONLY (e.g. "1416469884"). NEVER use display names, usernames, or @handles. Must be a number. Get the exact ID from the user profile in context. Only required when targetType is "dm".',
           },
         },
         required: ['reminderText', 'minutesFromNow', 'confirmationMessage'],
@@ -70,6 +70,11 @@ export class SendReminderTool implements AgentTool {
     const isDm = context.parsedMessage.isDm;
     const requesterTelegramId = context.parsedMessage.userId;
 
+    const resolvedTargetType = isDm ? 'dm' : (targetType ?? 'group');
+    const resolvedTargetUserId = isDm
+      ? requesterTelegramId
+      : (targetUserId ?? null);
+
     const userId = context.assembledContext.userProfile?.id;
     const chatId = context.parsedMessage.chatId;
 
@@ -82,15 +87,19 @@ export class SendReminderTool implements AgentTool {
       };
     }
 
+    if (resolvedTargetType === 'dm' && resolvedTargetUserId) {
+      if (isNaN(Number(resolvedTargetUserId))) {
+        return {
+          success: false,
+          error: `targetUserId must be a numeric Telegram ID, not a display name or username. Received: "${resolvedTargetUserId}". Use the exact numeric Telegram ID from the user profile in context.`,
+        };
+      }
+    }
+
     this.logger.log(`Scheduling reminder for user ${userId} in ${mins} mins`);
 
     try {
       const scheduledFor = new Date(Date.now() + mins * 60000);
-
-      const resolvedTargetType = isDm ? 'dm' : (targetType ?? 'group');
-      const resolvedTargetUserId = isDm
-        ? requesterTelegramId
-        : (targetUserId ?? null);
 
       const reminder = await this.prisma.reminder.create({
         data: {
