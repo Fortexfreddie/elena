@@ -14,6 +14,24 @@ export interface AgentContext {
   decryptedSecretsSet: Set<string>;
   /** Media content for multimodal processing (populated by worker if hasMedia) */
   mediaContent?: Part;
+  /** Telegram message ID of the status message (if any) */
+  statusMessageId?: number;
+  /** Timestamp when the status message was first sent */
+  statusStartTime?: number;
+  /** Callback to update the Telegram status message as progress happens */
+  onStatusUpdate?: (update: AgentStatusUpdate) => Promise<void>;
+}
+
+export interface AgentStatusUpdate {
+  agentName: string;
+  modelUsed: string;
+  modelFallback: boolean;
+  toolsDone: string[];
+  currentTool: string | null;
+  currentToolDetail: string | null;
+  stepNumber: number;
+  maxSteps: number;
+  suspended: boolean;
 }
 
 /**

@@ -15,6 +15,7 @@ import { QueueModule } from './queue/queue.module';
 import { validateEnv } from '@app/config';
 import { TelegramModule } from './telegram/telegram.module';
 import { AgentsModule } from './agents/agents.module';
+import { ScheduledModule } from './scheduled/scheduled.module';
 
 /**
  * Worker module — imports only what the BullMQ worker needs.
@@ -69,6 +70,7 @@ import { AgentsModule } from './agents/agents.module';
     TelegramModule,
     AgentsModule,
     QueueModule,
+    ScheduledModule,
   ],
 })
 class WorkerModule {}

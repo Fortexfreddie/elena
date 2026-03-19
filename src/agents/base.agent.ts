@@ -10,6 +10,7 @@ import type { GeminiModel } from '@app/common/gemini/gemini.constants';
 import { ExecutorService } from '../tools/executor.service';
 import { PersonasInjector } from './personas.injector';
 import { MAX_TOOL_CALLS } from '@app/common/gemini/gemini.constants';
+import { getToolDetail } from './status.builder';
 
 export abstract class BaseAgent {
   protected readonly logger: Logger;
@@ -31,8 +32,30 @@ export abstract class BaseAgent {
   }
 
   protected buildSystemInstruction(context: AgentContext): string {
-    // PersonasInjector handles the heavy lifting
-    return this.personasInjector.inject(context, this.getRoleInstruction());
+    const base = this.personasInjector.inject(context, this.getRoleInstruction());
+    const toolAwareness = `
+
+TOOL CALL AWARENESS:
+You have a maximum of ${MAX_TOOL_CALLS} tool calls available for this task.
+Keep track of how many you have used. When you are on your final step,
+do NOT make another tool call — synthesize what you have and respond.
+If you have gathered enough information before reaching the limit,
+respond immediately rather than using more tool calls unnecessarily.`;
+
+    const formattingRules = `
+
+TELEGRAM FORMATTING RULES (strictly follow these):
+- Use *bold* for emphasis and section titles — NOT **double asterisks** and NOT ### headers
+- Use \`inline code\` for code snippets, commands, variable names, and file paths
+- Use triple backtick code blocks for multi-line code
+- NEVER use ### or ## or # for headers — use *Bold Title* on its own line instead
+- NEVER use --- or ___ for dividers — use a blank line between sections instead
+- Use - or • for bullet points
+- Keep responses clean and readable in a chat interface
+- Example of correct section header: *NestJS v11 Breaking Changes*
+- Example of wrong section header: ### NestJS v11 Breaking Changes`;
+
+    return base + toolAwareness + formattingRules;
   }
 
   protected formatHistory(context: AgentContext): Content[] {
@@ -129,6 +152,20 @@ export abstract class BaseAgent {
           collectedFunctionCalls.push(
             call as import('@google/genai').FunctionCall,
           );
+
+          // Fire status update BEFORE executing each tool
+          await context.onStatusUpdate?.({
+            agentName: this.name,
+            modelUsed: response.model,
+            modelFallback: response.model !== this.defaultModel,
+            toolsDone: toolsCalled.slice(0, -1), // Current tool is NOT done yet
+            currentTool: call.name,
+            currentToolDetail: getToolDetail(call.name, call.args as Record<string, unknown>),
+            stepNumber: toolsCalled.length,
+            maxSteps: MAX_TOOL_CALLS,
+            suspended: false,
+          });
+
           const result = await this.executorService.executeCall(call, context);
 
           if (result.suspended) {
@@ -163,6 +200,20 @@ export abstract class BaseAgent {
 
         if (isSuspended) {
           const latencyMs = Date.now() - startTime;
+
+          // Fire status update AFTER suspension is detected
+          await context.onStatusUpdate?.({
+            agentName: this.name,
+            modelUsed: response.model,
+            modelFallback: response.model !== this.defaultModel,
+            toolsDone: toolsCalled.slice(),
+            currentTool: null,
+            currentToolDetail: null,
+            stepNumber: toolsCalled.length,
+            maxSteps: MAX_TOOL_CALLS,
+            suspended: true,
+          });
+
           return {
             text: response.text ?? 'Action suspended awaiting confirmation.',
             agentName: this.name,

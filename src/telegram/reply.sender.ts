@@ -81,12 +81,12 @@ export class ReplySenderService implements OnModuleInit {
   ): Promise<void> {
 
 
-    let processedText = text;
+    let processedText = this.convertToTelegramMarkdown(text);
     if (escape) {
       if (parseMode === 'MarkdownV2') {
-        processedText = escapeMarkdownV2(text);
+        processedText = escapeMarkdownV2(processedText);
       } else if (parseMode === 'HTML') {
-        processedText = escapeHtml(text);
+        processedText = escapeHtml(processedText);
       }
     }
 
@@ -142,5 +142,65 @@ export class ReplySenderService implements OnModuleInit {
         `Could not send typing action to chat ${chatId}: ${message}`,
       );
     }
+  }
+
+  /**
+   * Sends an initial status message.
+   */
+  async sendStatusMessage(chatId: string, text: string): Promise<number | null> {
+    try {
+      const msg = await this.bot.api.sendMessage(chatId, text);
+      return msg.message_id;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Failed to send status message to ${chatId}: ${message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Updates an existing status message.
+   */
+  async updateStatusMessage(
+    chatId: string,
+    messageId: number,
+    text: string,
+  ): Promise<void> {
+    try {
+      await this.bot.api.editMessageText(
+        chatId,
+        messageId,
+        text,
+      );
+    } catch {
+      // silent — edit failures are non-critical
+    }
+  }
+
+  /**
+   * Deletes a message from the chat.
+   */
+  async deleteMessage(chatId: string, messageId: number): Promise<void> {
+    try {
+      await this.bot.api.deleteMessage(chatId, messageId);
+    } catch {
+      // silent — delete failures are non-critical
+    }
+  }
+
+  /**
+   * Converts standard Markdown to Telegram-compatible Markdown subset.
+   */
+  private convertToTelegramMarkdown(text: string): string {
+    return text
+      // Convert ### headers to *bold* (handle 1-6 levels)
+      .replace(/^#{1,6}\s+(.+)$/gm, '*$1*')
+      // Convert **double asterisk bold** to *single asterisk bold*
+      .replace(/\*\*(.+?)\*\*/g, '*$1*')
+      // Remove --- and ___ dividers (replace with blank line)
+      .replace(/^[-_]{3,}$/gm, '')
+      // Clean up triple+ newlines to double newline
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 }

@@ -26,6 +26,7 @@ import { PrismaService } from '@app/database';
 import { InterviewerService } from '../onboarding/interviewer.service';
 import { TelegramMediaService } from '../telegram/media.service';
 import { PersonasInjector } from '../agents/personas.injector';
+import { buildStatusText } from '../agents/status.builder';
 
 @Processor(QUEUE_NAMES.MESSAGES, {
   concurrency: 10,
@@ -344,6 +345,33 @@ export class MessageProcessor extends WorkerHost {
           mediaContent,
         };
 
+        // NEW: Status Message System Wiring
+        let statusMessageId: number | undefined = undefined;
+        try {
+          const initialStatusText = buildInitialStatus(decision.routeTo);
+          const sentId = await this.replySender.sendStatusMessage(
+            parsedMessage.chatId,
+            initialStatusText,
+          );
+          if (sentId) {
+            statusMessageId = sentId;
+            agentContext.statusMessageId = statusMessageId;
+            agentContext.statusStartTime = Date.now();
+            agentContext.onStatusUpdate = async (update) => {
+              if (statusMessageId) {
+                const text = buildStatusText(update);
+                await this.replySender.updateStatusMessage(
+                  parsedMessage.chatId,
+                  statusMessageId,
+                  text,
+                );
+              }
+            };
+          }
+        } catch (statusErr) {
+          this.logger.warn(`Failed to initialize status message: ${statusErr}`);
+        }
+
         try {
           this.logger.log(
             `[EXECUTION_TRACE] Manager routing execution to agent: ${decision.routeTo}`,
@@ -379,6 +407,13 @@ export class MessageProcessor extends WorkerHost {
             role: 'assistant',
           });
 
+          // Replace status message or send new reply
+          if (statusMessageId) {
+            await this.replySender.deleteMessage(
+              parsedMessage.chatId,
+              statusMessageId,
+            );
+          }
           await this.replySender.sendReply(
             parsedMessage.chatId,
             response.text,
@@ -435,4 +470,21 @@ export class MessageProcessor extends WorkerHost {
       `Job ${job.id ?? 'unknown'} completed in ${Date.now() - startTime}ms`,
     );
   }
+}
+
+/**
+ * Builds the initial "Starting up..." status text.
+ */
+function buildInitialStatus(routeTo: string): string {
+  const agentEmoji: Record<string, string> = {
+    coder: '👨💻',
+    researcher: '🔍',
+    reviewer: '🔎',
+    brainstorm: '🧠',
+    task: '📋',
+    manager: '🤔',
+  };
+  const emoji = agentEmoji[routeTo.toLowerCase()] ?? '⚡';
+  const name = routeTo.charAt(0).toUpperCase() + routeTo.slice(1);
+  return `${emoji} ${name} Agent\n━━━━━━━━━━━━━━━━━━━\n⏳ Starting up...`;
 }

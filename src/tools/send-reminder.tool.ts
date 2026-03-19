@@ -11,14 +11,14 @@ export class SendReminderTool implements AgentTool {
   private readonly logger = new Logger(SendReminderTool.name);
 
   name = 'send_reminder';
-  description = 'Schedule a reminder to be sent to a user at a specific time.';
+  description = 'Schedule a reminder. In DM conversations always use targetType="dm" and set targetUserId to the requester telegram ID from context. In group conversations use targetType="group".';
   requiresConfirmation = false;
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => QueueService))
     private readonly queue: QueueService,
-  ) {}
+  ) { }
 
   getDeclaration(): FunctionDeclaration {
     return {
@@ -67,6 +67,9 @@ export class SendReminderTool implements AgentTool {
     const targetType = (args['targetType'] as string) ?? 'group';
     const targetUserId = args['targetUserId'] as string | undefined;
 
+    const isDm = context.parsedMessage.isDm;
+    const requesterTelegramId = context.parsedMessage.userId;
+
     const userId = context.assembledContext.userProfile?.id;
     const chatId = context.parsedMessage.chatId;
 
@@ -84,15 +87,23 @@ export class SendReminderTool implements AgentTool {
     try {
       const scheduledFor = new Date(Date.now() + mins * 60000);
 
+      const resolvedTargetType = isDm ? 'dm' : (targetType ?? 'group');
+      const resolvedTargetUserId = isDm
+        ? requesterTelegramId
+        : (targetUserId ?? null);
+
       const reminder = await this.prisma.reminder.create({
         data: {
           userId,
-          chatId: targetType === 'dm' && targetUserId ? targetUserId : chatId,
+          chatId:
+            resolvedTargetType === 'dm' && resolvedTargetUserId
+              ? resolvedTargetUserId
+              : chatId,
           reminderMessage: text,
           confirmationMessage: conf,
           scheduledFor,
-          targetType: targetType ?? 'group',
-          targetUserId: targetType === 'dm' ? targetUserId : null,
+          targetType: resolvedTargetType,
+          targetUserId: resolvedTargetUserId,
         },
       });
 
