@@ -70,3 +70,6 @@ brain/
 
 # Temp media storage
 /tmp/
+
+# Test files
+test-serper.ts

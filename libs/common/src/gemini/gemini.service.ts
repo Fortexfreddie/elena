@@ -200,13 +200,17 @@ export class GeminiService {
    * Generate an embedding vector for the given text.
    * Uses gemini-embedding-001 with outputDimensionality=768.
    */
-  async embed(text: string): Promise<number[]> {
+  async embed(
+    text: string,
+    taskType: string = 'RETRIEVAL_DOCUMENT',
+  ): Promise<number[]> {
     try {
       const response = await this.ai.models.embedContent({
         model: GEMINI_MODELS.EMBEDDING,
         contents: text,
         config: {
           outputDimensionality: EMBEDDING_DIMENSIONS,
+          taskType: taskType,
         },
       });
 

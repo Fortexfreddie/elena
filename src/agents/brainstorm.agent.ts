@@ -27,6 +27,7 @@ export class BrainstormAgent extends BaseAgent {
   private static readonly ALLOWED_TOOLS = [
     'memory_search',
     'web_search',
+    'doc_scraper',
   ];
 
   protected getTools(): FunctionDeclaration[] {

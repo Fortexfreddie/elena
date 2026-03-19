@@ -67,6 +67,9 @@ export class DocScraperTool implements AgentTool {
           headers: {
             'User-Agent': 'ElenaSquadBot/1.0 (Research Agent)',
             Accept: 'text/markdown',
+            ...(process.env['JINA_API_KEY']
+              ? { Authorization: `Bearer ${process.env['JINA_API_KEY']}` }
+              : {}),
           },
         },
       );

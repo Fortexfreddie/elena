@@ -83,7 +83,7 @@ export class WarmMemoryService implements OnModuleInit {
     if (!query || query.trim().length < 5) return [];
 
     try {
-      const vector = await this.geminiService.embed(query);
+      const vector = await this.geminiService.embed(query, 'RETRIEVAL_QUERY');
       this.logger.debug(`Generated Vector Dimension: ${vector.length}`);
 
       const results = await this.client.query(this.collectionName, {
@@ -123,7 +123,7 @@ export class WarmMemoryService implements OnModuleInit {
     if (!this.client) return;
 
     try {
-      const vector = await this.geminiService.embed(text);
+      const vector = await this.geminiService.embed(text, 'RETRIEVAL_DOCUMENT');
       const pointId = crypto.randomUUID();
 
       await this.client.upsert(this.collectionName, {

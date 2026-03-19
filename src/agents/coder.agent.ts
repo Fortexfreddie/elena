@@ -29,6 +29,7 @@ export class CoderAgent extends BaseAgent {
     'github_fetch',
     'run_code',
     'web_search',
+    'doc_scraper',
     'log_monitor',
   ];
 

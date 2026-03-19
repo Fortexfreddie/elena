@@ -28,6 +28,7 @@ export class ReviewerAgent extends BaseAgent {
     'github_fetch',
     'memory_search',
     'web_search',
+    'doc_scraper',
   ];
 
   protected getTools(): FunctionDeclaration[] {

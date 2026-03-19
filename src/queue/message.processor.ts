@@ -356,9 +356,13 @@ export class MessageProcessor extends WorkerHost {
             `[EXECUTION_TRACE] Agent '${decision.routeTo}' completed in ${Date.now() - startTime}ms`,
           );
 
-          if (response.functionCalls && response.functionCalls.length > 0) {
+          if (response.functionCalls && response.functionCalls.length > 0 && (!response.text || response.text.trim().length === 0)) {
             this.logger.warn(
-              `Non-text parts (functionCalls) detected in final agent response for chat ${parsedMessage.chatId}. Storing text segment only.`,
+              `Non-text parts (functionCalls) detected with no text in final agent response for chat ${parsedMessage.chatId}.`,
+            );
+          } else if (response.functionCalls && response.functionCalls.length > 0) {
+            this.logger.debug(
+              `Agent had pending tool calls in final response but text was present — text used, tool calls ignored.`,
             );
           }
 
