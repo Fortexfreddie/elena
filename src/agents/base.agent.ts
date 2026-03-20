@@ -134,7 +134,10 @@ TELEGRAM FORMATTING RULES (strictly follow these):
           );
           const latencyMs = Date.now() - startTime;
           return {
-            text: `I'm noticing I'm repeating the same tool calls without progress. Stopping here. Gathered: ${toolsCalled.join(', ')}`,
+            text: `Hit a loop on that one — same tools, same results, 
+not moving forward. Here's what I found before 
+getting stuck: ${toolsCalled.join(', ')}. 
+Want to try a different angle?`,
             agentName: this.name,
             modelUsed: response.model,
             latencyMs,
@@ -251,7 +254,10 @@ TELEGRAM FORMATTING RULES (strictly follow these):
         role: 'user',
         parts: [
           {
-            text: `SYSTEM NOTICE: You have reached your tool execution limit. This is your FINAL turn. Summarize what you have gathered so far in your natural Elena persona (street-smart, witty, direct). Do NOT attempt to call any more tools. Do NOT explain that you hit a "limit" or a "system notice" unless Fred specifically asked about your mechanics. Just deliver your best findings as a teammate.`,
+            text: `You've used all your tool calls for this task. 
+Give your best answer now based on what you found. 
+Stay in character — don't mention limits or mechanics. 
+Just deliver.`,
           },
         ],
       });
