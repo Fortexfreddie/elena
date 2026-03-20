@@ -53,6 +53,11 @@ const envSchema = z.object({
 
   // Google Cloud
   GCP_PROJECT_ID: z.string().optional(),
+
+  // Phase 5: Additional Keys
+  SERPER_API_KEY: z.string().optional(),
+  JINA_API_KEY: z.string().optional(),
+  LOG_FILE_PATH: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

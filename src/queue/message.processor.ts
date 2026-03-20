@@ -27,6 +27,7 @@ import { InterviewerService } from '../onboarding/interviewer.service';
 import { TelegramMediaService } from '../telegram/media.service';
 import { PersonasInjector } from '../agents/personas.injector';
 import { buildStatusText } from '../agents/status.builder';
+import { SecurityAlertService } from '../telegram/security-alert.service';
 
 @Processor(QUEUE_NAMES.MESSAGES, {
   concurrency: 10,
@@ -52,6 +53,7 @@ export class MessageProcessor extends WorkerHost {
     private readonly personasInjector: PersonasInjector,
     private readonly geminiService: GeminiService,
     private readonly prisma: PrismaService,
+    private readonly securityAlert: SecurityAlertService,
   ) {
     super();
   }
@@ -76,23 +78,14 @@ export class MessageProcessor extends WorkerHost {
     if (recognitionState !== 'known') {
       if ((recognitionState === 'unknown' || recognitionState === 'pending') && parsedMessage.isDm) {
         // Guest Activity Alert for Superadmin (Users seen in group or in onboarding)
-        try {
-          const superadmin = await this.prisma.user.findFirst({
-            where: { role: 'superadmin' },
-          });
-
-          if (superadmin) {
-            const from = parsedMessage.rawUpdate.message?.from;
-            const username = from?.username ? `@${from.username}` : 'No username';
-            const displayName = from?.first_name || 'Stranger';
-            const alertText = `🛡️ *GUEST ACTIVITY ALERT*\n\nAn unapproved user (Guest/Pending) is messaging Elena.\n\n👤 *Name:* ${displayName}\n🆔 *ID:* ${parsedMessage.userId}\n🌐 *Username:* ${username}\n💬 *Message:* ${parsedMessage.text || '[Media Only]'}`;
-
-            await this.replySender.sendReply(superadmin.telegramId, alertText);
-            this.logger.log(`[SECURITY] Guest activity alert sent to superadmin for user ${parsedMessage.userId}`);
-          }
-        } catch (err) {
-          this.logger.warn(`Failed to send guest activity alert to superadmin`, err);
-        }
+        const from = parsedMessage.rawUpdate.message?.from;
+        await this.securityAlert.sendGuestActivityAlert(
+          parsedMessage.userId,
+          from?.first_name || 'Anonymous',
+          from?.username || null,
+          parsedMessage.text || null,
+          recognitionState as any,
+        );
       }
 
       this.logger.log(

@@ -7,12 +7,16 @@ import { ReactionSenderService } from './reaction.sender';
 import { QueueModule } from '../queue/queue.module';
 import { PersonasModule } from '../personas/personas.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
+import { SecretsModule } from '../secrets/secrets.module';
+
+import { SecurityAlertService } from './security-alert.service';
 
 @Module({
   imports: [
     forwardRef(() => QueueModule),
     PersonasModule,
     forwardRef(() => OnboardingModule),
+    forwardRef(() => SecretsModule),
   ],
   controllers: [WebhookController],
   providers: [
@@ -20,7 +24,13 @@ import { OnboardingModule } from '../onboarding/onboarding.module';
     TelegramMediaService,
     DmDispatcherService,
     ReactionSenderService,
+    SecurityAlertService,
   ],
-  exports: [ReplySenderService, TelegramMediaService, DmDispatcherService],
+  exports: [
+    ReplySenderService,
+    TelegramMediaService,
+    DmDispatcherService,
+    SecurityAlertService,
+  ],
 })
 export class TelegramModule {}

@@ -19,6 +19,8 @@ import { PrismaService } from '@app/database';
 import { ClaimAdminCommand } from '../onboarding/claim-admin.command';
 import type { TelegramUpdate, ParsedMessage } from '@app/common/types/telegram.types';
 import { UpstashRedisService, escapeHtml, escapeMarkdownV2 } from '@app/common';
+import { VaultService } from '../secrets/vault.service';
+import { SecurityAlertService } from './security-alert.service';
 
 /**
  * Webhook controller for incoming Telegram updates.
@@ -48,6 +50,8 @@ export class WebhookController {
     private readonly redisService: UpstashRedisService,
     private readonly profileBuilder: ProfileBuilder,
     private readonly prisma: PrismaService,
+    private readonly vaultService: VaultService,
+    private readonly securityAlert: SecurityAlertService,
     @Inject(forwardRef(() => ClaimAdminCommand))
     private readonly claimAdmin: ClaimAdminCommand,
   ) {}
@@ -238,6 +242,119 @@ export class WebhookController {
           );
           return { ok: true };
         }
+
+        if (lower.startsWith('/secret ')) {
+          const senderId = String(update.message?.from?.id);
+
+          // Phase 5.1 Refinement: Enforce DM-only for security
+          // Use parsed.isDm if available, but here we are in the messageText block before parsed is created.
+          // We can check update.message.chat.type
+          const isDm = update.message?.chat.type === 'private';
+          if (!isDm) {
+            await this.replySender.sendReply(
+              String(update.message?.chat.id),
+              '⚠️ For security, you can only store secrets via DM with Elena.',
+              undefined,
+              null,
+            );
+            return { ok: true };
+          }
+
+          const senderUser = await this.prisma.user.findUnique({
+            where: { telegramId: senderId },
+            select: { id: true, role: true },
+          });
+
+          if (!senderUser || senderUser.role === 'guest') {
+            return { ok: true }; // Guests cannot store secrets
+          }
+
+          // Parse: /secret LABEL VALUE [expires:DAYS]
+          const parts = messageText.trim().split(/\s+/);
+          if (parts.length < 3) {
+            await this.replySender.sendReply(
+              String(update.message?.chat.id),
+              '⚠️ Usage: `/secret LABEL VALUE` or `/secret LABEL VALUE expires:30`',
+              undefined,
+              null,
+            );
+            return { ok: true };
+          }
+
+          const label = parts[1];
+          const expiresMatch = parts[parts.length - 1].match(/^expires:(\d+)$/i);
+          const hasExpires = !!expiresMatch;
+          const value = hasExpires 
+            ? parts.slice(2, -1).join(' ')
+            : parts.slice(2).join(' ');
+          
+          const expiresAt = hasExpires 
+            ? new Date(Date.now() + parseInt(expiresMatch![1]) * 24 * 60 * 60 * 1000)
+            : undefined;
+
+          // derivationId = senderId (Telegram ID)
+          await this.vaultService.storeSecret(senderUser.id, senderId, label, value, expiresAt);
+
+          // Delete the message immediately for security (prevent secret appearing in chat)
+          if (update.message?.message_id) {
+            await this.replySender.deleteMessage(
+              String(update.message.chat.id),
+              update.message.message_id,
+            );
+          }
+
+          const now = new Date();
+          const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+          const expiryText = expiresAt 
+            ? ` \\(expires ${expiresAt.toLocaleDateString()}\\)` 
+            : '';
+          
+          // DM the confirmation — never reply in group with secret confirmation
+          await this.replySender.sendReply(
+            senderId,
+            `🔐 Secret *${label}* stored securely at ${timeStr}${expiryText}. The message has been deleted from the chat.`,
+            undefined,
+            'MarkdownV2',
+          );
+
+          return { ok: true };
+        }
+
+        if (lower === '/secrets') {
+          const senderId = String(update.message?.from?.id);
+          const senderUser = await this.prisma.user.findUnique({
+            where: { telegramId: senderId },
+            select: { id: true, role: true },
+          });
+
+          if (!senderUser || senderUser.role === 'guest') {
+            return { ok: true };
+          }
+
+          const secrets = await this.vaultService.listSecrets(senderUser.id);
+          
+          if (secrets.length === 0) {
+            await this.replySender.sendReply(
+              senderId,
+              '🔐 You have no stored secrets.',
+              undefined,
+              null,
+            );
+            return { ok: true };
+          }
+
+          const list = secrets.map(s => 
+            `• *${s.label}*${s.expiresAt ? ` (expires ${s.expiresAt.toLocaleDateString()})` : ''}`
+          ).join('\n');
+
+          await this.replySender.sendReply(
+            senderId,
+            `🔐 *Your Secrets* (labels only — values never shown):\n\n${list}`,
+            undefined,
+            'MarkdownV2',
+          );
+          return { ok: true };
+        }
       }
 
       // Retrieve eagerly-resolved bot ID
@@ -274,14 +391,20 @@ export class WebhookController {
           },
         });
       } else {
-        // In DMs: If user is unknown (not in DB), ignore them completely
+        // In DMs: If user is unknown (not in DB), ignore them completely but alert admins
         if (!sender) {
           this.logger.warn(
             `[SECURITY_TRACE] Ignoring DM from unknown user ${parsed.userId}. (Group-First Guard ACTIVE)`,
           );
 
-          // M-9: Removed redundant Stranger Alert to prevent duplication with GUEST ACTIVITY ALERT
-
+          // Phase 5.1 Fix: Send Stranger Activity Alert
+          const from = update.message?.from || update.callback_query?.from;
+          await this.securityAlert.sendStrangerAlert(
+            parsed.userId,
+            from?.first_name || 'Anonymous',
+            from?.username || null,
+            parsed.text || null,
+          );
 
           return { ok: true };
         }
