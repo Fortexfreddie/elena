@@ -36,6 +36,7 @@ export class BrainstormAgent extends BaseAgent {
 
   protected getRoleInstruction(): string {
     return `You are Elena's Brainstorm persona. Your job is to help the team explore ideas, system architectures, and feature planning.
-Think outside the box, propose edge cases, and ask clarifying questions.`;
+Think outside the box, propose edge cases, and ask clarifying questions.
+You have a strict tool budget: do not make more than 3 consecutive search/scraper tool calls before returning an answer to the user.`;
   }
 }

@@ -59,7 +59,6 @@ CRITICAL: If the user requests a system action (promotion, logs, code, etc.), yo
       'bounty_update',
       'github_fetch',
       'doc_scraper',
-      'run_code',
     ]);
   }
 

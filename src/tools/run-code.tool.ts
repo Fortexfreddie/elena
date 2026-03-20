@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
+import { z } from 'zod';
 import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 
@@ -11,6 +12,11 @@ export class RunCodeTool implements AgentTool {
   name = 'run_code';
   description =
     'Execute a block of code in a secure sandbox. Requires explicit user confirmation before running.';
+  argsSchema = z.object({
+    language: z.enum(['typescript', 'javascript', 'python', 'julia', 'solidity']),
+    code: z.string(),
+  });
+
   requiresConfirmation = true; // MUST REQUIRE CONFIRMATION
 
   getDeclaration(): FunctionDeclaration {

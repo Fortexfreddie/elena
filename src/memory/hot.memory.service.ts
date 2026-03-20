@@ -71,8 +71,9 @@ export class HotMemoryService {
       });
       if (!retry) {
         this.logger.warn(
-          `Hot memory lock contention on chat ${chatId} — writing anyway`,
+          `Hot memory lock contention on chat ${chatId} — dropping write to prevent corruption`,
         );
+        return; // Drop this write rather than risk corrupting the list
       }
     }
 

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
+import { z } from 'zod';
 import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import { WarmMemoryService } from '../memory/warm.memory.service';
@@ -12,6 +13,10 @@ export class MemorySearchTool implements AgentTool {
   name = 'memory_search';
   description =
     'Search through Elena\'s "Warm Memory" (previously discussed technical topics, project context, and user-specific knowledge) using semantic search. Use this when the direct chat history is insufficient.';
+  argsSchema = z.object({
+    query: z.string(),
+  });
+
   requiresConfirmation = false;
 
   constructor(private readonly warmMemory: WarmMemoryService) {}

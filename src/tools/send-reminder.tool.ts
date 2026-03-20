@@ -1,6 +1,7 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
+import { z } from 'zod';
 import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import { PrismaService } from '@app/database/database.service';
@@ -12,6 +13,14 @@ export class SendReminderTool implements AgentTool {
 
   name = 'send_reminder';
   description = 'Schedule a reminder. Use targetType="group" to deliver in the current chat (default, always safe). Use targetType="dm" only when the user explicitly requests a private reminder — in that case targetUserId MUST be a numeric Telegram ID from context, never a display name.';
+  argsSchema = z.object({
+    reminderText: z.string(),
+    confirmationMessage: z.string(),
+    minutesFromNow: z.number(),
+    targetType: z.enum(['group', 'dm']).optional(),
+    targetUserId: z.string().optional(),
+  });
+
   requiresConfirmation = false;
 
   constructor(

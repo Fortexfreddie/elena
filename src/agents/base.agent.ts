@@ -37,7 +37,8 @@ export abstract class BaseAgent {
 
 TOOL CALL AWARENESS:
 You have a maximum of ${MAX_TOOL_CALLS} tool calls available for this task.
-Keep track of how many you have used. When you are on your final step,
+This count resets for every new message you receive from the user.
+Keep track of how many you have used in this specific response. When you are on your final step,
 do NOT make another tool call — synthesize what you have and respond.
 If you have gathered enough information before reaching the limit,
 respond immediately rather than using more tool calls unnecessarily.`;
@@ -59,9 +60,10 @@ TELEGRAM FORMATTING RULES (strictly follow these):
   }
 
   protected formatHistory(context: AgentContext): Content[] {
-    return context.assembledContext.hotMessages.map((msg) => ({
+    const messages = context.assembledContext?.hotMessages || [];
+    return messages.map((msg) => ({
       role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.text }],
+      parts: [{ text: msg.text || '[media]' }],
     }));
   }
 
@@ -147,6 +149,17 @@ TELEGRAM FORMATTING RULES (strictly follow these):
         callContextHashes.add(currentCallHash);
 
         for (const call of response.functionCalls) {
+          if (toolsCalled.length >= MAX_TOOL_CALLS) {
+            this.logger.warn(`Agent [${this.name}] skipping tool ${call.name} (limit reached).`);
+            toolResponseParts.push({
+              functionResponse: {
+                name: call.name,
+                response: { error: 'Execution limit reached. This action was not performed.' },
+              },
+            });
+            continue;
+          }
+
           this.logger.log(`Executing tool: ${call.name}`);
           toolsCalled.push(call.name);
           collectedFunctionCalls.push(
@@ -161,7 +174,7 @@ TELEGRAM FORMATTING RULES (strictly follow these):
             toolsDone: toolsCalled.slice(0, -1), // Current tool is NOT done yet
             currentTool: call.name,
             currentToolDetail: getToolDetail(call.name, call.args as Record<string, unknown>),
-            stepNumber: toolsCalled.length,
+            stepNumber: Math.min(toolsCalled.length, MAX_TOOL_CALLS),
             maxSteps: MAX_TOOL_CALLS,
             suspended: false,
           });
@@ -229,17 +242,33 @@ TELEGRAM FORMATTING RULES (strictly follow these):
         }
       }
 
-      // Fallback for reaching max iterations
-      const latencyMs = Date.now() - startTime;
+      // Fallback for reaching max iterations: Request a final summary in Elena's voice
       this.logger.warn(
-        `Agent [${this.name}] reached max iterations (${MAX_TOOL_CALLS}).`,
+        `Agent [${this.name}] reached max iterations (${MAX_TOOL_CALLS}). Requesting final best-effort summary.`,
+      );
+
+      history.push({
+        role: 'user',
+        parts: [
+          {
+            text: `SYSTEM NOTICE: You have reached your tool execution limit. This is your FINAL turn. Summarize what you have gathered so far in your natural Elena persona (street-smart, witty, direct). Do NOT attempt to call any more tools. Do NOT explain that you hit a "limit" or a "system notice" unless Fred specifically asked about your mechanics. Just deliver your best findings as a teammate.`,
+          },
+        ],
+      });
+
+      const finalSummary = await this.geminiService.generateContent(
+        this.defaultModel,
+        history,
+        { systemInstruction },
       );
 
       return {
-        text: `The task reached the maximum execution limit (${MAX_TOOL_CALLS} steps). I've gathered some information but need to stop here to avoid a loop. Please let me know if you'd like me to continue or try a different approach.`,
+        text:
+          finalSummary.text ||
+          "I've reached my execution limit and couldn't pin down a definitive answer. Let's try rephrasing or a different approach.",
         agentName: this.name,
-        modelUsed: this.defaultModel,
-        latencyMs,
+        modelUsed: finalSummary.model,
+        latencyMs: Date.now() - startTime,
         confidence: 50,
         toolsCalled,
         functionCalls:
@@ -248,18 +277,21 @@ TELEGRAM FORMATTING RULES (strictly follow these):
             : undefined,
       };
     } catch (error: unknown) {
-      const isSafetyBlock = error instanceof ModelError && error.message.includes('PROHIBITED_CONTENT');
-      
-      if (isSafetyBlock) {
-        this.logger.warn(`Agent ${this.name} hit PROHIBITED_CONTENT block. Returning safety rejection.`);
-        return {
-          text: "I'm sorry, my safety filters blocked my reasoning for this task. I can't proceed with that specific request as it is currently phrased.",
-          agentName: this.name,
-          modelUsed: this.defaultModel,
-          latencyMs: Date.now() - startTime,
-          confidence: 0,
-          toolsCalled,
-        };
+      if (error instanceof ModelError) {
+        // M-12: Catch non-transient errors (like PROHIBITED_CONTENT or 400 Bad Request) 
+        // to gracefully degrade instead of crashing the Queue worker
+        if (error.message.includes('PROHIBITED_CONTENT') || (error as any).status === 400) {
+          const reason = error.message.includes('PROHIBITED_CONTENT') ? 'safety filters' : 'a formatting issue in my instructions';
+          this.logger.warn(`Agent ${this.name} hit non-transient error: ${error.message}. Returning fallback message.`);
+          return {
+            text: `I'm sorry, I couldn't process that request due to ${reason}. Could we try rephrasing or taking a different approach?`,
+            agentName: this.name,
+            modelUsed: this.defaultModel,
+            latencyMs: Date.now() - startTime,
+            confidence: 0,
+            toolsCalled,
+          };
+        }
       }
 
       this.logger.error(`Execution failed for ${this.name}: ${error}`);

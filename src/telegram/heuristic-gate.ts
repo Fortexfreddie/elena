@@ -26,10 +26,10 @@ export function shouldProcess(parsed: ParsedMessage): boolean {
   }
 
   // No text means media-only message.
-  // In Phase 3.14, we allow silent media in groups to reach the FilterAgent.
+  // M-1 (Q3 Decision): Only allow media-only messages if they are DMs or replies to the bot to save API costs.
   const text = parsed.text;
   if (!text) {
-    return parsed.hasMedia; // Pass if it has an image/voice, otherwise skip
+    return parsed.hasMedia && (parsed.isDm || !!parsed.replyToBot);
   }
 
   const lower = text.toLowerCase();

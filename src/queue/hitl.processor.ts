@@ -34,7 +34,7 @@ export class HitlProcessor extends WorkerHost {
       // Atomic claim to prevent race conditions (double click)
       const isClaimed = await this.redisService.client.set(claimKey, '1', {
         nx: true,
-        ex: 60,
+        ex: 600, // C-1: Must outlive pendingActionKey (300s). Prevents late re-claims.
       });
 
       if (!isClaimed) {
@@ -135,6 +135,17 @@ export class HitlProcessor extends WorkerHost {
         return;
       }
 
+      // C-1: Atomic consume - delete the pending key BEFORE execution.
+      // If it's already gone, someone else consumed it, preventing double-execution.
+      const consumed = await this.redisService.client.del(pendingActionKey);
+      if (consumed === 0) {
+        this.logger.warn(`[HITL] Pending action ${pendingActionKey} already consumed. Aborting to prevent double-execution.`);
+        if (chatId !== 'unknown') {
+          await this.replySender.sendReply(chatId, '⚠️ This action was already executed.').catch(() => {});
+        }
+        return;
+      }
+
       // Execute the tool directly
       this.logger.log(`Resuming tool execution: ${toolName}`);
       const result = await tool.execute(args, context);
@@ -159,8 +170,6 @@ export class HitlProcessor extends WorkerHost {
       );
 
 
-      // Cleanup
-      await this.redisService.client.del(pendingActionKey);
       this.logger.log(
         `[EXECUTION_TRACE] HITL ${jobId} completed successfully.`,
       );

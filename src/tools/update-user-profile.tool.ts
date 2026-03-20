@@ -5,7 +5,7 @@ import type { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import { UpdateUserProfileArgsSchema } from '@app/common/types/agent.types';
 import type { AgentTool } from './base.tool';
 import { PrismaService } from '@app/database';
-import { OnboardingStatus, UserRole } from '@prisma/client';
+import { OnboardingStatus, UserRole, Prisma } from '@prisma/client';
 
 @Injectable()
 export class UpdateUserProfileTool implements AgentTool {
@@ -137,7 +137,7 @@ export class UpdateUserProfileTool implements AgentTool {
 
 
     // 4. Update data construction
-    const updateData: any = {};
+    const updateData: Prisma.UserUpdateInput = {};
     if (displayName) updateData.displayName = displayName;
 
     // We extract existing personaJson to merge it properly

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
+import { z } from 'zod';
 import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import got from 'got';
@@ -12,6 +13,10 @@ export class DocScraperTool implements AgentTool {
   name = 'doc_scraper';
   description =
     'Extract Markdown-converted text from a URL. Use this for deep research grounding when you need to read documentation or technical blog posts.';
+  argsSchema = z.object({
+    url: z.string(),
+  });
+
   requiresConfirmation = false;
 
   getDeclaration(): FunctionDeclaration {

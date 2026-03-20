@@ -68,9 +68,7 @@ export class ApproverService {
             keyboard,
           );
 
-          // We use sendReply to handle chunking, and pass MarkdownV2 explicitly.
-          // However, sendReply also calls escapeMarkdownV2 on the whole message if parseMode is MarkdownV2.
-          // Wait, if I escape fields here AND sendReply escapes the whole message, I'll have double escaping.
+          // Fields are pre-escaped above; escape=false in sendReply() prevents double-escaping.
         } catch (err: unknown) {
           this.logger.error(
             `Failed to notify founder ${founder.telegramId}`,

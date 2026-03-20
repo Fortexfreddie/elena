@@ -46,13 +46,14 @@ export class QueueService {
    * Add a message job to the processing queue.
    * Job ID includes chatId prefix for traceability in dashboards.
    */
-  async addMessageJob(parsedMessage: ParsedMessage): Promise<string> {
+  async addMessageJob(parsedMessage: ParsedMessage, updateId?: number): Promise<string> {
     const jobData: MessageJob = {
       parsedMessage,
       retryCount: 0,
     };
 
     const job = await this.messagesQueue.add('process-message', jobData, {
+      jobId: updateId ? `msg-${updateId}` : undefined,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
       removeOnComplete: { count: 100 },

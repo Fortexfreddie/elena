@@ -60,8 +60,13 @@ export class ExecutorService {
       const pendingData = {
         toolName,
         args: call.args,
+        requesterId: context.parsedMessage.userId, // Store the original requester for option B verification
         context: {
           ...contextWithoutMedia,
+          parsedMessage: {
+            ...context.parsedMessage,
+            rawUpdate: undefined, // M-3: Strip raw Telegram update payload to prevent leaking sensitive info to Redis
+          },
           decryptedSecretsSet: undefined, // Strip the Set (not JSON-safe)
           decryptedSecretsArray: Array.from(context.decryptedSecretsSet),
         },

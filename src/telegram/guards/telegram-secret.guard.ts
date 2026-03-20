@@ -5,6 +5,7 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
 
 /**
  * Guard that validates the X-Telegram-Bot-Api-Secret-Token header.
@@ -30,7 +31,11 @@ export class TelegramSecretGuard implements CanActivate {
 
     const headerSecret = request.headers['x-telegram-bot-api-secret-token'];
 
-    if (!headerSecret || headerSecret !== this.secret) {
+    if (
+      !headerSecret || 
+      headerSecret.length !== this.secret.length || 
+      !timingSafeEqual(Buffer.from(headerSecret), Buffer.from(this.secret))
+    ) {
       this.logger.warn('Rejected webhook request: invalid secret token');
       throw new UnauthorizedException('Invalid Telegram webhook secret');
     }

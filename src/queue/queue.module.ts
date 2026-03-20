@@ -26,6 +26,8 @@ import { ToolsModule } from '../tools/tools.module';
 const providers: Provider[] = [QueueService];
 
 // Only enable the consumer logic if this is the worker process
+// I-2: PROCESS_TYPE is evaluated statically at module load time. 
+// This prevents runtime hot-swapping between webhook and worker modes, which is intentional for deployment isolation.
 if (process.env['PROCESS_TYPE'] === 'worker') {
   providers.push(MessageProcessor);
   providers.push(HitlProcessor);

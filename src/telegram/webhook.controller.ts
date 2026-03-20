@@ -17,7 +17,7 @@ import { QueueService } from '../queue/queue.service';
 import { ProfileBuilder } from '../personas/profile-builder.service';
 import { PrismaService } from '@app/database';
 import { ClaimAdminCommand } from '../onboarding/claim-admin.command';
-import type { TelegramUpdate } from '@app/common/types/telegram.types';
+import type { TelegramUpdate, ParsedMessage } from '@app/common/types/telegram.types';
 import { UpstashRedisService, escapeHtml, escapeMarkdownV2 } from '@app/common';
 
 /**
@@ -76,7 +76,7 @@ export class WebhookController {
       return { ok: true };
     }
 
-    let parsed: any = null;
+    let parsed: ParsedMessage | null = null;
     try {
       // Step 0.5: Check for Callback Queries (Approval Flow)
       if (update.callback_query) {
@@ -99,15 +99,15 @@ export class WebhookController {
           this.logger.log(
             `[APPROVAL_TRACE] Founder ${fromId} clicked approval button: ${callbackData}`,
           );
-          // 1. Verify founder status
+          // 1. Verify founder or admin status (M-10)
           const user = await this.prisma.user.findUnique({
             where: { telegramId: fromId },
-            select: { isFoundingMember: true },
+            select: { isFoundingMember: true, role: true },
           });
 
-          if (!user?.isFoundingMember) {
+          if (!user || (!user.isFoundingMember && !['admin', 'superadmin'].includes(user.role))) {
             this.logger.warn(
-              `Non-founder ${fromId} tried to approve/deny onboarding.`,
+              `Unauthorized user ${fromId} tried to approve/deny onboarding.`,
             );
             return { ok: true };
           }
@@ -153,6 +153,41 @@ export class WebhookController {
           const jobId = hitlMatch[2];
           const processedBy = String(update.message?.from?.id ?? 'unknown');
 
+          // C-2: Security - Verify sender is admin/superadmin OR the original requester before allowing HITL actions
+          const sender = await this.prisma.user.findUnique({
+            where: { telegramId: processedBy },
+            select: { role: true },
+          });
+
+          const pendingActionKey = `hitl:${jobId}`;
+          const rawPending = await this.redisService.client.get(pendingActionKey);
+          
+          let requesterId = 'unknown';
+          if (rawPending && typeof rawPending === 'string') {
+            try {
+              const pendingData = JSON.parse(rawPending);
+              requesterId = pendingData.requesterId || 'unknown';
+            } catch (err) {
+              this.logger.warn(`Failed to parse pending action data for jobId ${jobId}`);
+            }
+          }
+
+          if (!rawPending) {
+            this.logger.warn(
+              `[HITL] Cannot verify requesterId for jobId ${jobId} — Redis key missing or expired. Falling back to admin-only confirmation.`
+            );
+          }
+
+          if (
+            !sender ||
+            (!['admin', 'superadmin'].includes(sender.role) && processedBy !== requesterId)
+          ) {
+            this.logger.warn(
+              `[SECURITY] Unauthorized user ${processedBy} tried to ${action} HITL job ${jobId}`,
+            );
+            return { ok: true }; // Silent drop
+          }
+
           if (action === 'confirm') {
             await this.queueService.addHitlResumeJob(jobId, processedBy);
           } else {
@@ -179,6 +214,20 @@ export class WebhookController {
           return { ok: true };
         }
         if (lower === '/clear') {
+          // C-3: Add admin-only role check to /clear command
+          const senderId = String(update.message?.from?.id);
+          const sender = await this.prisma.user.findUnique({
+            where: { telegramId: senderId },
+            select: { role: true },
+          });
+
+          if (!sender || !['admin', 'superadmin'].includes(sender.role)) {
+            this.logger.warn(
+              `[SECURITY] Non-admin ${senderId} tried to use /clear`,
+            );
+            return { ok: true }; // Silent drop
+          }
+
           const chatId = String(update.message?.chat.id);
           await this.redisService.client.del(`hot:${chatId}`);
           await this.replySender.sendReply(
@@ -231,28 +280,8 @@ export class WebhookController {
             `[SECURITY_TRACE] Ignoring DM from unknown user ${parsed.userId}. (Group-First Guard ACTIVE)`,
           );
 
-          // Stranger Alert for Superadmin (Security Notification)
-          try {
-            const superadmin = await this.prisma.user.findFirst({
-              where: { role: 'superadmin' },
-            });
+          // M-9: Removed redundant Stranger Alert to prevent duplication with GUEST ACTIVITY ALERT
 
-            if (superadmin) {
-              const from = update.message?.from;
-              const username = from?.username
-                ? `@${from.username}`
-                : 'No username';
-              const displayName = from?.first_name || 'Stranger';
-              const alertText = `🛡️ *STRANGER ALERT (BLOCKED)*\n\nA total stranger attempted to DM Elena. They were silently ignored due to Group-First Guard.\n\n👤 *Name:* ${displayName}\n🆔 *ID:* ${parsed.userId}\n🌐 *Username:* ${username}\n💬 *Message:* ${parsed.text || '[Media Only]'}`;
-
-              await this.replySender.sendReply(superadmin.telegramId, alertText);
-              this.logger.log(
-                `[SECURITY] Stranger alert sent to superadmin for blocked user ${parsed.userId}`,
-              );
-            }
-          } catch (err) {
-            this.logger.warn(`Failed to send stranger alert to superadmin`, err);
-          }
 
           return { ok: true };
         }
@@ -275,7 +304,7 @@ export class WebhookController {
       }
 
       // Step 6: Push to BullMQ queue
-      await this.queueService.addMessageJob(parsed);
+      await this.queueService.addMessageJob(parsed, updateId);
 
       return { ok: true };
     } catch (error: unknown) {

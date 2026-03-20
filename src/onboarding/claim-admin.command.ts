@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@app/database';
-import { UserRole, OnboardingStatus } from '@prisma/client';
+import { UserRole, OnboardingStatus, OnboardingSessionStatus } from '@prisma/client';
 
 @Injectable()
 export class ClaimAdminCommand {
@@ -42,6 +42,12 @@ export class ClaimAdminCommand {
               onboardingStatus: OnboardingStatus.approved,
             },
           });
+          
+          await tx.onboardingSession.updateMany({
+            where: { telegramId, status: { in: [OnboardingSessionStatus.in_progress, OnboardingSessionStatus.pending_approval] } },
+            data: { status: OnboardingSessionStatus.approved },
+          });
+
           return '✅ Access Granted. You are now the Superadmin and Founding Member of Elena.';
         }
         return null;

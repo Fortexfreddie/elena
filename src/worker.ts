@@ -53,7 +53,7 @@ import { ScheduledModule } from './scheduled/scheduled.module';
         tls: {
           rejectUnauthorized: false,
         },
-        enableOfflineQueue: true,
+        enableOfflineQueue: false, // L-3: Fail fast instead of buffering locally and causing OOM if Upstash connection drops
         connectTimeout: 20000,
         commandTimeout: 30000,
         family: 4,
@@ -98,6 +98,26 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const logger = app.get(Logger);
+  
+  // L-6: Manual temp file sweep on start (e.g. leftover downloaded media files generated if a previous worker crashed)
+  try {
+    const { tmpdir } = await import('os');
+    const { readdir, unlink } = await import('fs/promises');
+    const { join } = await import('path');
+    const tmp = tmpdir();
+    const files = await readdir(tmp);
+    let cleaned = 0;
+    for (const file of files) {
+      if (file.startsWith('tg-dl-') || file.startsWith('voice-') || file.endsWith('.ogg')) {
+        await unlink(join(tmp, file)).catch(() => {});
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) logger.log(`Cleaned ${cleaned} orphaned temp files from OS temp directory.`);
+  } catch (err) {
+    logger.warn('Failed to sweep OS temp files on start:', err);
+  }
+
   logger.log('Elena worker started');
 }
 

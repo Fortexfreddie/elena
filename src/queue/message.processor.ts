@@ -336,7 +336,7 @@ export class MessageProcessor extends WorkerHost {
           parsedMessage: {
             ...parsedMessage,
             text: mediaContextText
-              ? `${effectiveText || ''}\n\n[Media context: ${mediaContextText}]`
+              ? (effectiveText ? `${effectiveText}\n\n[Media context: ${mediaContextText}]` : `[Media context: ${mediaContextText}]`)
               : effectiveText,
           },
           assembledContext: context,
@@ -427,7 +427,7 @@ export class MessageProcessor extends WorkerHost {
           if (textToStore && textToStore.length > 0) {
             try {
               await this.warmMemory.store(
-                `${parsedMessage.text ?? '[media]'} | ${textToStore}`,
+                `${effectiveText ?? '[media]'} | ${textToStore}`,
                 {
                   userId: parsedMessage.userId,
                   chatId: parsedMessage.chatId,
@@ -446,6 +446,12 @@ export class MessageProcessor extends WorkerHost {
           }
         } catch (execErr: unknown) {
           this.logger.error(`Execution routing failed:`, execErr);
+          
+          // M-4: Delete stranded status message if execution throws an error
+          if (statusMessageId) {
+            await this.replySender.deleteMessage(parsedMessage.chatId, statusMessageId)
+              .catch((err) => this.logger.warn(`Failed to cleanup status message on crash: ${err}`));
+          }
         }
       }
     } catch (error: unknown) {

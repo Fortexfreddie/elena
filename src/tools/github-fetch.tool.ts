@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
 import { Octokit } from 'octokit';
+import { z } from 'zod';
 import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 
@@ -14,6 +15,13 @@ export class GithubFetchTool implements AgentTool {
   name = 'github_fetch';
   description =
     'Fetch metadata, issues, or file contents from a GitHub repository. Use this to grounding research or code analysis.';
+  argsSchema = z.object({
+    owner: z.string(),
+    repo: z.string(),
+    action: z.enum(['get_repo', 'get_issues', 'get_file']),
+    path: z.string().optional(),
+  });
+
   requiresConfirmation = false;
 
   constructor(private readonly config: ConfigService) {
@@ -70,7 +78,8 @@ export class GithubFetchTool implements AgentTool {
     if (!this.octokit)
       return { success: false, error: 'GitHub token not configured.' };
 
-    try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
       switch (action) {
         case 'get_repo': {
           const { data } = await this.octokit.rest.repos.get({ owner, repo });
@@ -152,9 +161,14 @@ export class GithubFetchTool implements AgentTool {
           return { success: false, error: `Action '${action}' not supported.` };
       }
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`GitHub API error (${action}): ${msg}`);
-      return { success: false, error: `GitHub API error: ${msg}` };
+        const msg = error instanceof Error ? error.message : String(error);
+        if (attempt === 3 || msg.includes('404') || msg.includes('401') || msg.includes('403')) {
+          this.logger.error(`GitHub API error (${action}): ${msg}`);
+          return { success: false, error: `GitHub API error: ${msg}` };
+        }
+        await new Promise(r => setTimeout(r, 1000 * attempt)); // M-7: Retry logic
+      }
     }
+    return { success: false, error: 'GitHub API error after retries.' };
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
+import { z } from 'zod';
 import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 
@@ -14,6 +15,11 @@ export class DelegateTaskTool implements AgentTool {
   name = 'delegate_task';
   description =
     'Delegate a complex task to a specific specialist agent. Use this for coding, reviewing, researching, brainstorming, or task management.';
+  argsSchema = z.object({
+    agent: z.enum(['coder', 'reviewer', 'researcher', 'brainstorm', 'task']),
+    reason: z.string(),
+  });
+
   requiresConfirmation = false;
 
   getDeclaration(): FunctionDeclaration {

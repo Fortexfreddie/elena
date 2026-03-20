@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
 import got from 'got';
+import { z } from 'zod';
 import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 
@@ -15,6 +16,11 @@ export class WebSearchTool implements AgentTool {
 
   name = 'web_search';
   description = 'Standard web search for facts, news, or general information.';
+  argsSchema = z.object({
+    query: z.string(),
+    domains: z.array(z.string()).optional(),
+  });
+
   requiresConfirmation = false;
 
   constructor(private readonly config: ConfigService) {}
@@ -71,6 +77,7 @@ export class WebSearchTool implements AgentTool {
         },
         json: payload,
         responseType: 'json',
+        retry: { limit: 3, methods: ['POST'] }, // M-7: Added retry logic for transient API failures
       });
 
       const data = response.body as any;

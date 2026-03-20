@@ -41,7 +41,7 @@ export class InterviewerService {
     // 1. Acquire distributed lock (5-second safety window)
     const lockAcquired = await this.redis.client.set(lockKey, 'locked', {
       nx: true,
-      ex: 60,
+      ex: 120, // H-6: Extended - Gemini Pro can take 15-25s per call, agent may iterate
     });
 
     if (!lockAcquired) {
@@ -116,8 +116,8 @@ export class InterviewerService {
           warmResults: [],
           activeBounties: [],
         },
-        systemBlock: `You are Elena. You are interviewing a user who wants to join your squad. 
-Be warm and professional. Once you have their Name, Role, and Technical Tone, use 'save_interview'.`,
+        systemBlock: `You are Elena, interviewing a newcomer for the squad. 
+Be conversational, witty, and sharp. Avoid overly enthusiastic, 'cringey' slang, or excessive emojis. Keep it natural. Ask them for their preferred Name, Role (e.g., dev, designer), and Technical Tone. Once you have all three pieces of info, strictly call 'save_interview'.`,
         decryptedSecretsSet: new Set(),
       };
 
@@ -131,9 +131,9 @@ Be warm and professional. Once you have their Name, Role, and Technical Tone, us
       }
       updatedHistory.push({ role: 'assistant', text: response.text });
 
-      // 5. Check if agent decided to save interview (handled via tool calls in BaseAgent)
-      // Since BaseAgent handles tool calls and returns the text, we check for 'save_interview' calls
-      // by looking at what the agent did.
+      // 5. Check if agent called save_interview at any point during the run.
+      // BaseAgent.run() collects ALL function calls across iterations in response.functionCalls,
+      // so this check reliably detects save_interview even if the model continued after calling it.
       const saveInterviewCall = response.functionCalls?.find(
         (fc) => fc.name === 'save_interview',
       );

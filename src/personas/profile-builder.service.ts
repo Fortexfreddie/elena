@@ -78,24 +78,29 @@ export class ProfileBuilder {
    */
   async reject(sessionId: string): Promise<void> {
     try {
+      // H-5: Fetch session FIRST to get telegramId before any writes
+      const session = await this.prisma.onboardingSession.findUnique({
+        where: { id: sessionId },
+      });
+
+      if (!session) {
+        this.logger.warn(`Reject: session ${sessionId} not found`);
+        return;
+      }
+
+      // H-5: Update both in consistent order: user first (the important one), then session
+      await this.prisma.user.update({
+        where: { telegramId: session.telegramId },
+        data: { onboardingStatus: OnboardingStatus.denied },
+      });
+
       await this.prisma.onboardingSession.update({
         where: { id: sessionId },
         data: { status: OnboardingSessionStatus.denied },
       });
 
-      const session = await this.prisma.onboardingSession.findUnique({
-        where: { id: sessionId },
-      });
-
-      if (session) {
-        await this.prisma.user.update({
-          where: { telegramId: session.telegramId },
-          data: { onboardingStatus: OnboardingStatus.denied },
-        });
-      }
-
       this.logger.log(
-        `[APPROVAL_TRACE] Onboarding session ${sessionId} for user ${session?.telegramId} rejected.`,
+        `[APPROVAL_TRACE] Onboarding session ${sessionId} for user ${session.telegramId} rejected.`,
       );
     } catch (error) {
       this.logger.error(`Failed to reject session ${sessionId}`, error);

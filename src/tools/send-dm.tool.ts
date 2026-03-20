@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
+import { z } from 'zod';
 import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import { DmDispatcherService } from '../telegram/dm.dispatcher';
@@ -13,6 +14,11 @@ export class SendDmTool implements AgentTool {
   name = 'send_dm';
   description =
     'Deliver an administrative message or notification directly to a user\'s private chat. Use this for sensitive info, private confirmations, or when explicitly requested by an admin.';
+  argsSchema = z.object({
+    targetTelegramId: z.string(),
+    text: z.string(),
+  });
+
   requiresConfirmation = true;
 
   constructor(

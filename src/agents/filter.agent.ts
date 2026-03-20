@@ -41,7 +41,7 @@ export class FilterAgent {
     parsed: ParsedMessage,
     hotMessages: HotMemoryEntry[] = [],
     mediaContent?: Part,
-    userProfile?: any,
+    userProfile?: { displayName?: string; role?: string } | null,
   ): Promise<FilterDecision> {
     const messageText = parsed.text ?? '[media message]';
 
@@ -96,7 +96,7 @@ ${contextLines ? `Recent context:\n${contextLines}\n\n` : ''}New message from us
         },
       );
 
-      let decisionJson: any;
+      let decisionJson: Record<string, unknown>;
       try {
         const text = response.text || '';
         const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
