@@ -53,7 +53,7 @@ import { ScheduledModule } from './scheduled/scheduled.module';
         tls: {
           rejectUnauthorized: false,
         },
-        enableOfflineQueue: false, // L-3: Fail fast instead of buffering locally and causing OOM if Upstash connection drops
+        enableOfflineQueue: true, // L-3: Buffer commands during brief Redis disconnections in the worker process
         connectTimeout: 20000,
         commandTimeout: 30000,
         family: 4,
