@@ -521,6 +521,24 @@ Stored in DB:
 
 ## Onboarding State Machine
 
+### High-Level Sequence Flow
+```
+New user sends message
+  → OnboardingDetector: unknown/pending
+  → InterviewerService.handleMessage()
+  → OnboardingAgent runs (gemini-3-flash-preview)
+  → Agent has ONE tool: save_interview
+  → Asks questions one at a time
+  → When enough info gathered → calls save_interview
+  → InterviewerService detects save_interview in response.functionCalls
+  → ProfileBuilder.buildProfile() creates persona_json
+  → ApproverService.notifyFounders() DMs all founders
+  → Founders receive approve/deny buttons
+  → /approve_{sessionId} → approve_user tool / ProfileBuilder.finalize()
+  → On confirm → user.onboardingStatus = approved
+```
+
+### Detailed Execution
 ```
 User appears in group chat
   → WebhookController upserts with role: 'guest'

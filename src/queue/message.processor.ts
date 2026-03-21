@@ -28,6 +28,8 @@ import { TelegramMediaService } from '../telegram/media.service';
 import { PersonasInjector } from '../agents/personas.injector';
 import { buildStatusText } from '../agents/status.builder';
 import { SecurityAlertService } from '../telegram/security-alert.service';
+import { SanitizerService } from '../safety/sanitizer.service';
+import { SafetyChecklistService } from '../safety/safety-checklist.service';
 
 @Processor(QUEUE_NAMES.MESSAGES, {
   concurrency: 10,
@@ -54,6 +56,8 @@ export class MessageProcessor extends WorkerHost {
     private readonly geminiService: GeminiService,
     private readonly prisma: PrismaService,
     private readonly securityAlert: SecurityAlertService,
+    private readonly sanitizer: SanitizerService,
+    private readonly safetyChecklist: SafetyChecklistService,
   ) {
     super();
   }
@@ -251,6 +255,18 @@ export class MessageProcessor extends WorkerHost {
 
 
     try {
+      const context = { parsedMessage: { ...parsedMessage, text: effectiveText } } as any;
+      const safetyResult = await this.safetyChecklist.run(context);
+      if (!safetyResult.passed) {
+        await this.replySender.sendReply(
+          parsedMessage.chatId,
+          safetyResult.deflectMessage ?? 
+            "I can't help with that.",
+          parsedMessage.rawUpdate.message?.message_id,
+        ).catch(() => {})
+        return;
+      }
+
       const decision = await this.filterAgent.route(
         parsedMessage,
         assembledContext?.hotMessages ?? [],
@@ -280,8 +296,13 @@ export class MessageProcessor extends WorkerHost {
           return;
         }
 
+        const sanitizedReply = this.sanitizer.sanitize(
+          decision.reply,
+          new Set(), // filter replies don't have secrets context
+        );
+
         await this.hotMemory.addMessage(parsedMessage.chatId, {
-          text: decision.reply,
+          text: sanitizedReply,
           telegramDate: Math.floor(Date.now() / 1000),
           updateId: Date.now(),
           userId: 'Elena',
@@ -289,16 +310,16 @@ export class MessageProcessor extends WorkerHost {
         });
         await this.replySender.sendReply(
           parsedMessage.chatId,
-          decision.reply,
+          sanitizedReply,
           parsedMessage.rawUpdate.message?.message_id,
         );
         this.logger.log(
-          `[RESPONSE_TRACE] Elena (Filter) sending: ${decision.reply.slice(0, 150)}${decision.reply.length > 150 ? '...' : ''}`,
+          `[RESPONSE_TRACE] Elena (Filter) sending: ${sanitizedReply.slice(0, 150)}${sanitizedReply.length > 150 ? '...' : ''}`,
         );
 
         try {
           await this.warmMemory.store(
-            `${effectiveText ?? '[media]'} | ${decision.reply}`,
+            `${effectiveText ?? '[media]'} | ${sanitizedReply}`,
             {
               userId: parsedMessage.userId,
               chatId: parsedMessage.chatId,
@@ -392,8 +413,14 @@ export class MessageProcessor extends WorkerHost {
             return;
           }
 
+          // Before replySender.sendReply() for agent responses:
+          const sanitizedResponse = this.sanitizer.sanitize(
+            response.text,
+            agentContext.decryptedSecretsSet,
+          );
+
           await this.hotMemory.addMessage(parsedMessage.chatId, {
-            text: response.text,
+            text: sanitizedResponse,
             telegramDate: Math.floor(Date.now() / 1000),
             updateId: Date.now(),
             userId: 'Elena',
@@ -409,14 +436,14 @@ export class MessageProcessor extends WorkerHost {
           }
           await this.replySender.sendReply(
             parsedMessage.chatId,
-            response.text,
+            sanitizedResponse,
             parsedMessage.rawUpdate.message?.message_id,
           );
           this.logger.log(
-            `[RESPONSE_TRACE] Elena (${decision.routeTo}) sending: ${response.text.slice(0, 150)}${response.text.length > 150 ? '...' : ''}`,
+            `[RESPONSE_TRACE] Elena (${decision.routeTo}) sending: ${sanitizedResponse.slice(0, 150)}${sanitizedResponse.length > 150 ? '...' : ''}`,
           );
 
-          const textToStore = response.text?.trim();
+          const textToStore = sanitizedResponse?.trim();
           if (textToStore && textToStore.length > 0) {
             try {
               await this.warmMemory.store(

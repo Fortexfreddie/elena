@@ -8,6 +8,7 @@ import { QueueModule } from '../queue/queue.module';
 import { PersonasModule } from '../personas/personas.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { SecretsModule } from '../secrets/secrets.module';
+import { SafetyModule } from '../safety/safety.module';
 
 import { SecurityAlertService } from './security-alert.service';
 
@@ -17,6 +18,7 @@ import { SecurityAlertService } from './security-alert.service';
     PersonasModule,
     forwardRef(() => OnboardingModule),
     forwardRef(() => SecretsModule),
+    forwardRef(() => SafetyModule),
   ],
   controllers: [WebhookController],
   providers: [

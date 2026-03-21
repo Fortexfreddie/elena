@@ -231,7 +231,7 @@ Want to try a different angle?`,
           });
 
           return {
-            text: response.text ?? 'Action suspended awaiting confirmation.',
+            text: response.text || 'I need your confirmation to proceed.',
             agentName: this.name,
             modelUsed: response.model,
             latencyMs,

@@ -61,7 +61,11 @@ get the researcher on this, they'll dig deeper than I can."
 Never use delegate_task for simple conversational 
 questions. If someone asks "what's up elena" just answer.
 Never end with a tool call pending — always deliver 
-a message to the user.`;
+a message to the user.
+
+When handling approval or denial requests, call 
+approve_user or deny_user directly. Never call 
+log_monitor as a first step for user management tasks.`;
   }
 
   protected getTools(): FunctionDeclaration[] {
@@ -70,7 +74,6 @@ a message to the user.`;
       'delegate_task',
       'send_dm',
       'send_reminder',
-      'log_monitor',
       'update_user_profile',
       'approve_user',
       'memory_search',

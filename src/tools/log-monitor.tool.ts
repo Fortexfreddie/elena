@@ -71,7 +71,8 @@ export class LogMonitorTool implements AgentTool {
         .replace(/xai-[a-zA-Z0-9]{32,}/g, '[REDACTED_XAI_KEY]')
         .replace(/rediss?:\/\/[^\s"']+/g, '[REDACTED_REDIS_URL]')
         .replace(/postgres(ql)?:\/\/[^\s"']+/g, '[REDACTED_DB_URL]')
-        .replace(/password[=:]\s*[^\s"',}]+/gi, 'password=[REDACTED]');
+        .replace(/password[=:]\s*[^\s"',}]+/gi, 'password=[REDACTED]')
+        .replace(/x-telegram-bot-api-secret-token["\s:]+[a-fA-F0-9]{20,}/gi, 'x-telegram-bot-api-secret-token: [REDACTED]');
 
       if (tail.length > 10000) {
         tail = tail.slice(-10000);

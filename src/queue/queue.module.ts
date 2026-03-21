@@ -9,6 +9,7 @@ import { TelegramModule } from '../telegram/telegram.module';
 import { MemoryModule } from '../memory/index';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { ToolsModule } from '../tools/tools.module';
+import { SafetyModule } from '../safety/safety.module';
 
 /**
  * Queue module — registers BullMQ queues with shared ioredis connection.
@@ -45,6 +46,7 @@ if (process.env['PROCESS_TYPE'] === 'worker') {
     MemoryModule,
     forwardRef(() => OnboardingModule),
     forwardRef(() => TelegramModule),
+    SafetyModule,
   ],
   providers,
   exports: [QueueService],

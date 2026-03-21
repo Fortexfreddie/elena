@@ -21,6 +21,7 @@ import type { TelegramUpdate, ParsedMessage } from '@app/common/types/telegram.t
 import { UpstashRedisService, escapeHtml, escapeMarkdownV2 } from '@app/common';
 import { VaultService } from '../secrets/vault.service';
 import { SecurityAlertService } from './security-alert.service';
+import { JailbreakDetectorService } from '../safety/jailbreak-detector.service';
 
 /**
  * Webhook controller for incoming Telegram updates.
@@ -52,6 +53,7 @@ export class WebhookController {
     private readonly prisma: PrismaService,
     private readonly vaultService: VaultService,
     private readonly securityAlert: SecurityAlertService,
+    private readonly jailbreakDetector: JailbreakDetectorService,
     @Inject(forwardRef(() => ClaimAdminCommand))
     private readonly claimAdmin: ClaimAdminCommand,
   ) {}
@@ -355,6 +357,44 @@ export class WebhookController {
           );
           return { ok: true };
         }
+
+        if (lower.startsWith('/delete-secret ')) {
+          const senderId = String(update.message?.from?.id);
+          const isDm = update.message?.chat.type === 'private';
+          
+          if (!isDm) return { ok: true };
+          
+          const senderUser = await this.prisma.user.findUnique({
+            where: { telegramId: senderId },
+            select: { id: true, role: true },
+          });
+
+          if (!senderUser || senderUser.role === 'guest') {
+            return { ok: true };
+          }
+
+          const parts = messageText.trim().split(/\s+/);
+          if (parts.length < 2) {
+            await this.replySender.sendReply(
+              senderId,
+              '⚠️ Usage: `/delete-secret LABEL`',
+              undefined,
+              null,
+            );
+            return { ok: true };
+          }
+
+          const label = parts[1];
+          await this.vaultService.deleteSecret(senderUser.id, label);
+          
+          await this.replySender.sendReply(
+            senderId,
+            `🗑️ Secret *${label}* deleted.`,
+            undefined,
+            'MarkdownV2',
+          );
+          return { ok: true };
+        }
       }
 
       // Retrieve eagerly-resolved bot ID
@@ -413,6 +453,19 @@ export class WebhookController {
       // Step 3: Stage 1 heuristic gate (zero cost)
       if (!shouldProcess(parsed)) {
         return { ok: true };
+      }
+
+      // Jailbreak detection — runs alongside pipeline, logs & alerts but does not block AI reply
+      if (parsed.text) {
+        const isInjection = await this.jailbreakDetector.detect(
+          parsed.text,
+          parsed.userId,
+          parsed.chatId,
+        );
+        if (isInjection) {
+          // Still queue the job — let Filter Agent handle the user-facing reply in Elena's voice
+          // But the detection + admin alert already fired
+        }
       }
 
       // Step 4: Rate limiting (Phase 2+)
