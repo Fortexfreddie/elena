@@ -6,6 +6,7 @@ import type { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import { TOOL_RESULT_MAX_CHARS } from '@app/common/gemini/gemini.constants';
 import { UpstashRedisService, escapeHtml } from '@app/common';
 import { ReplySenderService } from '../telegram/reply.sender';
+import { AuditLoggerService } from '../audit/audit-logger.service';
 
 @Injectable()
 export class ExecutorService {
@@ -16,6 +17,7 @@ export class ExecutorService {
     private readonly redisService: UpstashRedisService,
     @Inject(forwardRef(() => ReplySenderService))
     private readonly replySender: ReplySenderService,
+    private readonly auditLogger: AuditLoggerService,
   ) {}
 
   /**
@@ -119,6 +121,15 @@ export class ExecutorService {
       }
 
       const result = await tool.execute(validatedArgs, context);
+
+      await this.auditLogger.log({
+        actionType: 'tool_call',
+        telegramId: context.parsedMessage.userId,
+        toolCalled: toolName,
+        sanitizedSummary: result.success 
+          ? 'success' 
+          : result.error?.slice(0, 200),
+      }).catch(() => {})
 
       // Truncation logic (Prevent Gemini payload expansion limits)
       const serialized = JSON.stringify(result.data);

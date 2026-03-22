@@ -65,7 +65,13 @@ a message to the user.
 
 When handling approval or denial requests, call 
 approve_user or deny_user directly. Never call 
-log_monitor as a first step for user management tasks.`;
+log_monitor as a first step for user management tasks.
+
+When checking logs use log_monitor with EXACT parameter names:
+- logType: "raw" | "audit" | "both"
+- minutesBack: number (e.g. 30 for last 30 minutes)
+- lines: number (fallback when minutesBack not set)
+NEVER use "minutes" or "action" as parameter names — they do not exist.`;
   }
 
   protected getTools(): FunctionDeclaration[] {
@@ -74,6 +80,7 @@ log_monitor as a first step for user management tasks.`;
       'delegate_task',
       'send_dm',
       'send_reminder',
+      'log_monitor',
       'update_user_profile',
       'approve_user',
       'memory_search',

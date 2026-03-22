@@ -6,13 +6,14 @@ import { AgentTool } from './base.tool';
 import { ToolResult, AgentContext } from '@app/common/types/agent.types';
 import { PrismaService } from '@app/database/database.service';
 import { QueueService } from '../queue/queue.service';
+import { UserGroupService } from '../telegram/user-group.service';
 
 @Injectable()
 export class SendReminderTool implements AgentTool {
   private readonly logger = new Logger(SendReminderTool.name);
 
   name = 'send_reminder';
-  description = 'Schedule a reminder. Use targetType="group" to deliver in the current chat (default, always safe). Use targetType="dm" only when the user explicitly requests a private reminder — in that case targetUserId MUST be a numeric Telegram ID from context, never a display name.';
+  description = 'Schedule a reminder. Use targetType="dm" for personal reminders ("remind me"). Use targetType="group" ONLY when user explicitly says "remind the group" or "alert everyone". Default is "dm" when in doubt.';
   argsSchema = z.object({
     reminderText: z.string(),
     confirmationMessage: z.string(),
@@ -27,6 +28,8 @@ export class SendReminderTool implements AgentTool {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => QueueService))
     private readonly queue: QueueService,
+    @Inject(forwardRef(() => UserGroupService))
+    private readonly userGroupService: UserGroupService,
   ) { }
 
   getDeclaration(): FunctionDeclaration {
@@ -78,14 +81,54 @@ export class SendReminderTool implements AgentTool {
 
     const isDm = context.parsedMessage.isDm;
     const requesterTelegramId = context.parsedMessage.userId;
+    const chatId = context.parsedMessage.chatId;
 
-    const resolvedTargetType = isDm ? 'dm' : (targetType ?? 'group');
-    const resolvedTargetUserId = isDm
-      ? requesterTelegramId
-      : (targetUserId ?? null);
+    let resolvedTargetType = targetType ?? 'group';
+    let resolvedTargetChatId = chatId; // default to current chat
+
+    if (isDm) {
+      if (targetType === 'group') {
+        // User in DM wants reminder sent to their group
+        // Look up their most recent group
+        const userProfile = context.assembledContext.userProfile;
+        if (userProfile) {
+          const recentGroup = await this.userGroupService.getMostRecentGroup(
+            userProfile.id,
+          );
+          if (recentGroup) {
+            resolvedTargetType = 'group';
+            resolvedTargetChatId = recentGroup.chatId;
+            this.logger.log(
+              `[REMINDER] DM→Group: resolved to chatId ${recentGroup.chatId}`,
+            );
+          } else {
+            // No known groups — fall back to DM
+            resolvedTargetType = 'dm';
+            resolvedTargetChatId = requesterTelegramId;
+            this.logger.warn(
+              `[REMINDER] DM→Group requested but no known groups for user ${userProfile.id}. Falling back to DM.`,
+            );
+          }
+        } else {
+          resolvedTargetType = 'dm';
+          resolvedTargetChatId = requesterTelegramId;
+        }
+      } else {
+        // DM reminder to self
+        resolvedTargetType = 'dm';
+        resolvedTargetChatId = requesterTelegramId;
+      }
+    }
+
+    // Validate targetUserId if dm with explicit targetUserId
+    const resolvedTargetUserId =
+      resolvedTargetType === 'dm' && targetUserId
+        ? targetUserId
+        : resolvedTargetType === 'dm'
+        ? requesterTelegramId
+        : null;
 
     const userId = context.assembledContext.userProfile?.id;
-    const chatId = context.parsedMessage.chatId;
 
     if (!userId) return { success: false, error: 'User not found.' };
 
@@ -113,10 +156,7 @@ export class SendReminderTool implements AgentTool {
       const reminder = await this.prisma.reminder.create({
         data: {
           userId,
-          chatId:
-            resolvedTargetType === 'dm' && resolvedTargetUserId
-              ? resolvedTargetUserId
-              : chatId,
+          chatId: resolvedTargetChatId,
           reminderMessage: text,
           confirmationMessage: conf,
           scheduledFor,

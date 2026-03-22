@@ -9,7 +9,9 @@ import { PersonasModule } from '../personas/personas.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { SecretsModule } from '../secrets/secrets.module';
 import { SafetyModule } from '../safety/safety.module';
-
+import { AuditModule } from '../audit/audit.module';
+import { PrismaModule } from '@app/database';
+import { UserGroupService } from './user-group.service';
 import { SecurityAlertService } from './security-alert.service';
 
 @Module({
@@ -19,6 +21,8 @@ import { SecurityAlertService } from './security-alert.service';
     forwardRef(() => OnboardingModule),
     forwardRef(() => SecretsModule),
     forwardRef(() => SafetyModule),
+    AuditModule,
+    PrismaModule,
   ],
   controllers: [WebhookController],
   providers: [
@@ -27,12 +31,14 @@ import { SecurityAlertService } from './security-alert.service';
     DmDispatcherService,
     ReactionSenderService,
     SecurityAlertService,
+    UserGroupService,
   ],
   exports: [
     ReplySenderService,
     TelegramMediaService,
     DmDispatcherService,
     SecurityAlertService,
+    UserGroupService,
   ],
 })
 export class TelegramModule {}

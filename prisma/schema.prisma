@@ -62,9 +62,9 @@ model User {
   bounties           Bounty[]            @relation("CreatedBounties")
   assignedBounties   Bounty[]            @relation("AssignedBounties")
   secrets            Secret[]
-  auditLogs          AuditLog[]
   feedback           Feedback[]
   reminders          Reminder[]
+  userGroups         UserGroup[]
   hitlPending        HitlPending[]
   onboardingApproved OnboardingSession[] @relation("ApprovedBy")
 }
@@ -113,10 +113,8 @@ model AuditLog {
   sanitizedSummary String?
   latencyMs        Int?
   jobId            String?
+  telegramId       String?
   createdAt        DateTime @default(now())
-
-  user   User?   @relation(fields: [userId], references: [id])
-  userId String?
 }
 
 model Feedback {
@@ -172,4 +170,17 @@ model HitlPending {
 
   user   User   @relation(fields: [userId], references: [id])
   userId String
+}
+
+model UserGroup {
+  id          String   @id @default(uuid())
+  chatId      String
+  chatName    String?
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  @@unique([userId, chatId])
 }

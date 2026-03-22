@@ -6,6 +6,7 @@ import { RegistryService } from '../tools/registry.service';
 import { ReplySenderService } from '../telegram/reply.sender';
 import { UpstashRedisService, escapeMarkdownV2 } from '@app/common';
 import { AgentContext } from '@app/common/types/agent.types';
+import { AuditLoggerService } from '../audit/audit-logger.service';
 
 @Processor(QUEUE_NAMES.HITL, {
   concurrency: 5,
@@ -20,6 +21,7 @@ export class HitlProcessor extends WorkerHost {
     @Inject(forwardRef(() => ReplySenderService))
     private readonly replySender: ReplySenderService,
     private readonly redisService: UpstashRedisService,
+    private readonly auditLogger: AuditLoggerService,
   ) {
     super();
   }
@@ -50,6 +52,12 @@ export class HitlProcessor extends WorkerHost {
           jobId.split(':')[0], // We'll store jobId as "chatId:random"
           '❌ Action cancelled.',
         );
+
+        await this.auditLogger.log({
+          actionType: 'hitl_cancel',
+          jobId: jobId,
+        }).catch(() => {})
+
         return;
       }
 
@@ -169,6 +177,12 @@ export class HitlProcessor extends WorkerHost {
         resultMessage,
       );
 
+      await this.auditLogger.log({
+        actionType: 'hitl_confirm',
+        telegramId: confirmedBy,
+        jobId: jobId,
+        toolCalled: toolName,
+      }).catch(() => {})
 
       this.logger.log(
         `[EXECUTION_TRACE] HITL ${jobId} completed successfully.`,

@@ -22,6 +22,7 @@ import { UpstashRedisService, escapeHtml, escapeMarkdownV2 } from '@app/common';
 import { VaultService } from '../secrets/vault.service';
 import { SecurityAlertService } from './security-alert.service';
 import { JailbreakDetectorService } from '../safety/jailbreak-detector.service';
+import { AuditLoggerService } from '../audit/audit-logger.service';
 
 /**
  * Webhook controller for incoming Telegram updates.
@@ -54,6 +55,7 @@ export class WebhookController {
     private readonly vaultService: VaultService,
     private readonly securityAlert: SecurityAlertService,
     private readonly jailbreakDetector: JailbreakDetectorService,
+    private readonly auditLogger: AuditLoggerService,
     @Inject(forwardRef(() => ClaimAdminCommand))
     private readonly claimAdmin: ClaimAdminCommand,
   ) {}
@@ -245,6 +247,51 @@ export class WebhookController {
           return { ok: true };
         }
 
+        if (lower === '/halt') {
+          const senderId = String(update.message?.from?.id);
+          const sender = await this.prisma.user.findUnique({
+            where: { telegramId: senderId },
+            select: { role: true },
+          });
+
+          if (!sender || !['admin', 'superadmin'].includes(sender.role)) {
+            return { ok: true }; // Silent drop
+          }
+
+          // Set halt flag in Redis — MessageProcessor checks this flag
+          await this.redisService.client.set('elena:halt', '1', { ex: 3600 });
+          
+          await this.replySender.sendReply(
+            String(update.message?.chat.id),
+            '🛑 Elena halted. No new messages will be processed for 1 hour. Use /resume to restore.',
+            undefined,
+            null,
+          );
+          return { ok: true };
+        }
+
+        if (lower === '/resume') {
+          const senderId = String(update.message?.from?.id);
+          const sender = await this.prisma.user.findUnique({
+            where: { telegramId: senderId },
+            select: { role: true },
+          });
+
+          if (!sender || !['admin', 'superadmin'].includes(sender.role)) {
+            return { ok: true };
+          }
+
+          await this.redisService.client.del('elena:halt');
+          
+          await this.replySender.sendReply(
+            String(update.message?.chat.id),
+            '✅ Elena resumed. Back online.',
+            undefined,
+            null,
+          );
+          return { ok: true };
+        }
+
         if (lower.startsWith('/secret ')) {
           const senderId = String(update.message?.from?.id);
 
@@ -430,6 +477,29 @@ export class WebhookController {
             role: 'guest',
           },
         });
+
+        // Auto-register user-group relationship for cross-chat reminders
+        // Only register for known/approved users — not guests being created now
+        const registeredUser = await this.prisma.user.findUnique({
+          where: { telegramId: parsed.userId },
+          select: { id: true, onboardingStatus: true },
+        });
+
+        if (registeredUser && registeredUser.onboardingStatus === 'approved') {
+          await this.prisma.userGroup.upsert({
+            where: {
+              userId_chatId: {
+                userId: registeredUser.id,
+                chatId: parsed.chatId,
+              },
+            },
+            update: { lastSeenAt: new Date() },
+            create: {
+              userId: registeredUser.id,
+              chatId: parsed.chatId,
+            },
+          });
+        }
       } else {
         // In DMs: If user is unknown (not in DB), ignore them completely but alert admins
         if (!sender) {
@@ -465,6 +535,12 @@ export class WebhookController {
         if (isInjection) {
           // Still queue the job — let Filter Agent handle the user-facing reply in Elena's voice
           // But the detection + admin alert already fired
+          await this.auditLogger.log({
+            actionType: 'jailbreak_detected',
+            telegramId: parsed.userId,
+            jobId: String(update.update_id),
+            sanitizedSummary: parsed.text.slice(0, 200),
+          });
         }
       }
 

@@ -30,7 +30,9 @@ import { buildStatusText } from '../agents/status.builder';
 import { SecurityAlertService } from '../telegram/security-alert.service';
 import { SanitizerService } from '../safety/sanitizer.service';
 import { SafetyChecklistService } from '../safety/safety-checklist.service';
-
+import { AuditLoggerService } from '../audit/audit-logger.service';
+import { LangfuseService } from '../audit/langfuse.service';
+import { UpstashRedisService } from '@app/common';
 @Processor(QUEUE_NAMES.MESSAGES, {
   concurrency: 10,
   lockDuration: 30000,
@@ -58,12 +60,23 @@ export class MessageProcessor extends WorkerHost {
     private readonly securityAlert: SecurityAlertService,
     private readonly sanitizer: SanitizerService,
     private readonly safetyChecklist: SafetyChecklistService,
+    private readonly auditLogger: AuditLoggerService,
+    private readonly langfuse: LangfuseService,
+    private readonly redisService: UpstashRedisService,
   ) {
     super();
   }
 
   async process(job: Job<MessageJob>): Promise<void> {
     const { parsedMessage } = job.data;
+    
+    // Halt check — admin can pause all processing
+    const isHalted = await this.redisService.client.get('elena:halt');
+    if (isHalted) {
+      this.logger.warn(`[HALT] Elena is halted — dropping job ${job.id}`);
+      return;
+    }
+
     const startTime = Date.now();
 
     const effectiveText = parsedMessage.replyToContext
@@ -264,6 +277,13 @@ export class MessageProcessor extends WorkerHost {
             "I can't help with that.",
           parsedMessage.rawUpdate.message?.message_id,
         ).catch(() => {})
+
+        await this.auditLogger.log({
+          actionType: 'safety_block',
+          telegramId: parsedMessage.userId,
+          jobId: String(job.id ?? ''),
+          sanitizedSummary: safetyResult.reason ?? 'harmful content',
+        })
         return;
       }
 
@@ -301,6 +321,14 @@ export class MessageProcessor extends WorkerHost {
           new Set(), // filter replies don't have secrets context
         );
 
+        await this.auditLogger.log({
+          actionType: 'filter_reply',
+          telegramId: parsedMessage.userId,
+          jobId: job.id ?? 'unknown',
+          agentName: 'filter',
+          sanitizedSummary: sanitizedReply.slice(0, 500),
+        });
+
         await this.hotMemory.addMessage(parsedMessage.chatId, {
           text: sanitizedReply,
           telegramDate: Math.floor(Date.now() / 1000),
@@ -335,6 +363,7 @@ export class MessageProcessor extends WorkerHost {
             `Warm memory store failed (non-fatal): ${e instanceof Error ? e.message : String(e)}`,
           );
         }
+
         return;
       }
 
@@ -419,6 +448,31 @@ export class MessageProcessor extends WorkerHost {
             agentContext.decryptedSecretsSet,
           );
 
+          // Audit log every agent completion
+          await this.auditLogger.log({
+            actionType: 'agent_response',
+            telegramId: parsedMessage.userId,
+            jobId: job.id ?? 'unknown',
+            agentName: response.agentName,
+            modelUsed: response.modelUsed,
+            toolCalled: response.toolsCalled?.join(', ') ?? null,
+            sanitizedSummary: sanitizedResponse.slice(0, 500),
+            latencyMs: response.latencyMs,
+          });
+
+          // Langfuse trace
+          await this.langfuse.trace({
+            jobId: job.id ?? `elena-${Date.now()}`,
+            userId: parsedMessage.userId,
+            chatId: parsedMessage.chatId,
+            agentName: response.agentName,
+            modelUsed: response.modelUsed,
+            inputText: effectiveText ?? '[media]',
+            outputText: sanitizedResponse,
+            toolsCalled: response.toolsCalled ?? [],
+            latencyMs: response.latencyMs,
+          });
+
           await this.hotMemory.addMessage(parsedMessage.chatId, {
             text: sanitizedResponse,
             telegramDate: Math.floor(Date.now() / 1000),
@@ -476,6 +530,16 @@ export class MessageProcessor extends WorkerHost {
       }
     } catch (error: unknown) {
       this.logger.error(`Processor stage failed`, error);
+
+      await this.auditLogger.log({
+        actionType: 'job_failed',
+        telegramId: parsedMessage.userId,
+        jobId: String(job.id ?? ''),
+        sanitizedSummary: error instanceof Error 
+          ? error.message.slice(0, 200) 
+          : 'Unknown error',
+      }).catch(() => {}) // double safety — catch log failure too
+
       throw error;
     } finally {
       if (uploadedFileName) {

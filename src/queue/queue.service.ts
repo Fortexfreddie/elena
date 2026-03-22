@@ -108,4 +108,50 @@ export class QueueService {
 
     this.logger.log(`Added HITL cancel job for ${jobId} by ${cancelledBy}`);
   }
+
+  /**
+   * Register BullMQ repeatable jobs.
+   * Called once on worker startup.
+   * BullMQ deduplicates by repeat key — safe to call on every restart.
+   * Uses removeOnComplete to prevent job accumulation.
+   */
+  async registerRepeatableJobs(): Promise<void> {
+    // Purge expired secrets — runs every 6 hours
+    await this.scheduledQueue.add(
+      'purge-secrets',
+      {},
+      {
+        repeat: { pattern: '0 */6 * * *' }, // Every 6 hours
+        jobId: 'purge-secrets-repeatable',
+        removeOnComplete: { count: 5 },
+        removeOnFail: { count: 10 },
+      },
+    );
+
+    // Compress memory — runs nightly at 2am
+    await this.scheduledQueue.add(
+      'compress-memory',
+      {},
+      {
+        repeat: { pattern: '0 2 * * *' }, // 2am daily
+        jobId: 'compress-memory-repeatable',
+        removeOnComplete: { count: 5 },
+        removeOnFail: { count: 10 },
+      },
+    );
+
+    // Cleanup Gemini files — runs nightly at 3am
+    await this.scheduledQueue.add(
+      'cleanup-gemini-files',
+      {},
+      {
+        repeat: { pattern: '0 3 * * *' }, // 3am daily
+        jobId: 'cleanup-gemini-files-repeatable',
+        removeOnComplete: { count: 5 },
+        removeOnFail: { count: 10 },
+      },
+    );
+
+    this.logger.log('[QUEUE] Repeatable jobs registered');
+  }
 }

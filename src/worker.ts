@@ -6,12 +6,9 @@ import { BullModule } from '@nestjs/bullmq';
 import { LoggerModule } from 'nestjs-pino';
 import { PrismaModule } from '@app/database';
 import { GeminiModule, UpstashRedisModule } from '@app/common';
-import {
-  extractRedisHost,
-  extractRedisPort,
-  extractRedisPassword,
-} from '@app/common/utils/redis-url';
+import { extractRedisHost, extractRedisPort, extractRedisPassword } from '@app/common/utils/redis-url';
 import { QueueModule } from './queue/queue.module';
+import { QueueService } from './queue/queue.service';
 import { validateEnv } from '@app/config';
 import { TelegramModule } from './telegram/telegram.module';
 import { AgentsModule } from './agents/agents.module';
@@ -99,6 +96,10 @@ async function bootstrap(): Promise<void> {
 
   const logger = app.get(Logger);
   
+  // Register repeatable scheduled jobs (idempotent — BullMQ deduplicates by key)
+  const queueService = app.get(QueueService);
+  await queueService.registerRepeatableJobs();
+
   // L-6: Manual temp file sweep on start (e.g. leftover downloaded media files generated if a previous worker crashed)
   try {
     const { tmpdir } = await import('os');

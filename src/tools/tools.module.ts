@@ -19,6 +19,7 @@ import { PrismaModule } from '@app/database';
 import { TelegramModule } from '../telegram/telegram.module';
 import { QueueModule } from '../queue/queue.module';
 import { PersonasModule } from '../personas/personas.module';
+import { AuditModule } from '../audit/audit.module';
 import { forwardRef } from '@nestjs/common';
 
 @Module({
@@ -26,6 +27,7 @@ import { forwardRef } from '@nestjs/common';
     MemoryModule,
     PrismaModule,
     PersonasModule,
+    AuditModule,
     forwardRef(() => TelegramModule),
     forwardRef(() => QueueModule),
   ],

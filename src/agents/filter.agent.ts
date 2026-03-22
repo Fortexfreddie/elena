@@ -95,7 +95,10 @@ ROUTING RULES (evaluate in order, stop at first match):
 
 10. Not mentioned AND pure casual/banter → ignore
 
-11. DM to Elena → route to manager (always)
+11. DM to Elena → check content first:
+    - reminder, bounty, approve, promote, log check 
+      → route to task
+    - everything else → route to manager
 
 12. Anything that feels like a request → route to manager
 
