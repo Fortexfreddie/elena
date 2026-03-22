@@ -58,6 +58,7 @@ const envSchema = z.object({
   SERPER_API_KEY: z.string().optional(),
   JINA_API_KEY: z.string().optional(),
   LOG_FILE_PATH: z.string().optional(),
+  POLLINATIONS_API_KEY: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

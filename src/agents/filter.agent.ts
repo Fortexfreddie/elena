@@ -80,6 +80,9 @@ ROUTING RULES (evaluate in order, stop at first match):
 5. Brainstorm tasks (think through X, best approach 
    for Y, architecture discussion) → route to brainstorm
 
+5b. Image generation requests (generate image, create image, 
+    draw, make a picture) → route to brainstorm
+
 6. Task/admin actions (update bounty, set reminder, 
    send DM, promote user, system logs, approve someone) 
    → route to task

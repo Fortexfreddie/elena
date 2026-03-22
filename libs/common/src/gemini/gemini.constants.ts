@@ -1,6 +1,8 @@
 export const GEMINI_MODELS = {
   /** Lite model for routing/filtering — cheapest, fastest, free tier */
   FILTER: 'gemini-3.1-flash-lite-preview',
+  /** Image generation model */
+  IMAGE: 'gemini-3.1-flash-image-preview',
   /** Flash model for general tasks — fast, capable, free tier */
   FLASH: 'gemini-3-flash-preview',
   /** Pro model for complex tasks — most capable, free tier */

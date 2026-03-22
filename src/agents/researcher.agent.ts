@@ -29,6 +29,8 @@ export class ResearcherAgent extends BaseAgent {
     'doc_scraper',
     'memory_search',
     'log_monitor',
+    'prompt_engineer',
+    'generate_image',
   ];
 
   protected getTools(): FunctionDeclaration[] {
@@ -65,6 +67,11 @@ EFFICIENCY RULES:
 - You also have access to 'log_monitor' for system health and error queries
 
 TIME GROUNDING:
-When searching for "yesterday", "today", "upcoming", or specific release dates, ALWAYS use the CURRENT DATE provided in the ENVIRONMENT GROUNDING block as your absolute baseline. If the user asks for "yesterday" on March 20, 2026, you MUST search for March 19, 2026. Do NOT hallucinate past years.`;
+When searching for "yesterday", "today", "upcoming", or specific release dates, ALWAYS use the CURRENT DATE provided in the ENVIRONMENT GROUNDING block as your absolute baseline. If the user asks for "yesterday" on March 20, 2026, you MUST search for March 19, 2026. Do NOT hallucinate past years.
+
+PROMPT ENGINEERING:
+When the user asks to create a research brief or structured 
+research prompt — use the prompt_engineer tool with 
+targetContext=research.`;
   }
 }

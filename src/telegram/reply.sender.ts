@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import type { InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, ForceReply } from 'grammy/types';
 import { autoRetry } from '@grammyjs/auto-retry';
 import { chunkMessage, escapeHtml, escapeMarkdownV2 } from '@app/common';
@@ -185,6 +185,37 @@ export class ReplySenderService implements OnModuleInit {
       await this.bot.api.deleteMessage(chatId, messageId);
     } catch {
       // silent — delete failures are non-critical
+    }
+  }
+
+  /**
+   * Send a photo to a Telegram chat from a buffer.
+   */
+  async sendPhoto(
+    chatId: string,
+    imageBuffer: Buffer,
+    mimeType: string,
+    caption?: string,
+    replyToMessageId?: number,
+  ): Promise<void> {
+    try {
+      const extension = mimeType.split('/')[1] ?? 'jpg';
+      const filename = `elena-image-${Date.now()}.${extension}`;
+
+      await this.bot.api.sendPhoto(
+        chatId,
+        new InputFile(imageBuffer, filename),
+        {
+          caption: caption ?? undefined,
+          ...(replyToMessageId
+            ? { reply_parameters: { message_id: replyToMessageId } }
+            : {}),
+        },
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to send photo to chat ${chatId}: ${msg}`);
+      throw error;
     }
   }
 

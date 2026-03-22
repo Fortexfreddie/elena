@@ -71,7 +71,12 @@ When checking logs use log_monitor with EXACT parameter names:
 - logType: "raw" | "audit" | "both"
 - minutesBack: number (e.g. 30 for last 30 minutes)
 - lines: number (fallback when minutesBack not set)
-NEVER use "minutes" or "action" as parameter names — they do not exist.`;
+NEVER use "minutes" or "action" as parameter names — they do not exist.
+
+PROMPT ENGINEERING:
+When user asks to generate, improve, or structure a prompt 
+for any AI tool — use prompt_engineer tool directly.
+Never write prompts manually.`;
   }
 
   protected getTools(): FunctionDeclaration[] {
@@ -88,6 +93,8 @@ NEVER use "minutes" or "action" as parameter names — they do not exist.`;
       'bounty_update',
       'github_fetch',
       'doc_scraper',
+      'prompt_engineer',
+      'generate_image',
     ]);
   }
 

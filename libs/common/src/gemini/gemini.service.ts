@@ -284,6 +284,57 @@ export class GeminiService {
       this.logger.warn(`Failed to delete Gemini file ${name}: ${message}`);
     }
   }
+
+  /**
+   * Generate an image using Gemini image generation model.
+   * Returns base64 encoded image data and mime type.
+   * Returns null if generation fails or no image in response.
+   */
+  async generateImage(
+    prompt: string,
+  ): Promise<{ data: string; mimeType: string } | null> {
+    try {
+      const response = await this.ai.models.generateContent({
+        model: GEMINI_MODELS.IMAGE,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          responseModalities: ['IMAGE', 'TEXT'],
+        },
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+      
+      for (const part of parts) {
+        if (part.inlineData?.data && part.inlineData?.mimeType) {
+          return {
+            data: part.inlineData.data,
+            mimeType: part.inlineData.mimeType,
+          };
+        }
+      }
+
+      this.logger.warn('[IMAGE_GEN] No image data in response');
+      return null;
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+
+      // Fast-fail on quota — return null immediately so fallback kicks in
+      if (
+        msg.includes('RESOURCE_EXHAUSTED') ||
+        msg.includes('quota') ||
+        msg.includes('429') ||
+        msg.includes('free_tier')
+      ) {
+        this.logger.warn(
+          '[IMAGE_GEN] Quota exceeded on image model — returning null for fallback',
+        );
+        return null;
+      }
+
+      this.logger.error(`[IMAGE_GEN] Generation failed: ${msg}`);
+      return null;
+    }
+  }
   private extractRetryAfter(error: unknown): number {
     if (error instanceof Error) {
       const match = error.message.match(/retry after (\d+)/i);

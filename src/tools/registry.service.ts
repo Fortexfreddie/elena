@@ -19,6 +19,8 @@ import { DelegateTaskTool } from './delegate-task.tool';
 import { SaveInterviewTool } from './save-interview.tool';
 import { UpdateUserProfileTool } from './update-user-profile.tool';
 import { ApproveUserTool } from './approve-user.tool';
+import { PromptEngineerTool } from './prompt-engineer.tool';
+import { GenerateImageTool } from './generate-image.tool';
 import type { FunctionDeclaration } from '@google/genai';
 
 /**
@@ -47,6 +49,9 @@ export class RegistryService implements OnModuleInit {
     private readonly saveInterviewTool: SaveInterviewTool,
     private readonly updateUserProfileTool: UpdateUserProfileTool,
     private readonly approveUserTool: ApproveUserTool,
+    private readonly promptEngineerTool: PromptEngineerTool,
+    @Inject(forwardRef(() => GenerateImageTool))
+    private readonly generateImageTool: GenerateImageTool,
   ) {}
 
 
@@ -64,6 +69,8 @@ export class RegistryService implements OnModuleInit {
     this.registerTool(this.saveInterviewTool);
     this.registerTool(this.updateUserProfileTool);
     this.registerTool(this.approveUserTool);
+    this.registerTool(this.promptEngineerTool);
+    this.registerTool(this.generateImageTool);
   }
 
 

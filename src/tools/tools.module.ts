@@ -14,6 +14,8 @@ import { DelegateTaskTool } from './delegate-task.tool';
 import { SaveInterviewTool } from './save-interview.tool';
 import { UpdateUserProfileTool } from './update-user-profile.tool';
 import { ApproveUserTool } from './approve-user.tool';
+import { PromptEngineerTool } from './prompt-engineer.tool';
+import { GenerateImageTool } from './generate-image.tool';
 import { MemoryModule } from '../memory/memory.module';
 import { PrismaModule } from '@app/database';
 import { TelegramModule } from '../telegram/telegram.module';
@@ -21,9 +23,11 @@ import { QueueModule } from '../queue/queue.module';
 import { PersonasModule } from '../personas/personas.module';
 import { AuditModule } from '../audit/audit.module';
 import { forwardRef } from '@nestjs/common';
+import { GeminiModule } from '@app/common';
 
 @Module({
   imports: [
+    GeminiModule,
     MemoryModule,
     PrismaModule,
     PersonasModule,
@@ -47,6 +51,8 @@ import { forwardRef } from '@nestjs/common';
     SaveInterviewTool,
     UpdateUserProfileTool,
     ApproveUserTool,
+    PromptEngineerTool,
+    GenerateImageTool,
   ],
   exports: [RegistryService, ExecutorService, SaveInterviewTool, UpdateUserProfileTool, ApproveUserTool],
 })

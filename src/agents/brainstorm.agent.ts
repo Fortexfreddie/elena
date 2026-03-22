@@ -28,6 +28,8 @@ export class BrainstormAgent extends BaseAgent {
     'memory_search',
     'web_search',
     'doc_scraper',
+    'prompt_engineer',
+    'generate_image',
   ];
 
   protected getTools(): FunctionDeclaration[] {
@@ -63,6 +65,26 @@ because X, the weak point is Y".
 
 TOOL BUDGET: max 3 calls. memory_search first, 
 web_search for current patterns, doc_scraper only 
-for full specs. Synthesize on the last step.`;
+for full specs. Synthesize on the last step.
+
+PROMPT ENGINEERING:
+When the user asks to generate a prompt, improve a prompt, 
+create a Gravity prompt, or wants help phrasing something for 
+an AI tool — use the prompt_engineer tool.
+- targetContext=gravity: for code generation prompts
+- targetContext=image_gen: for AI image prompts  
+- targetContext=research: for research briefs
+- targetContext=agent_system_prompt: for AI agent system prompts
+- targetContext=general: for everything else
+NEVER write the prompt yourself manually — always use the tool.
+The tool returns the finished prompt. Present it to the user clearly.
+
+IMAGE GENERATION:
+When user asks to generate, create, or draw an image:
+1. If the prompt is vague → call prompt_engineer first 
+   with targetContext=image_gen to craft a better prompt
+2. Then call generate_image with the refined prompt
+3. Add a short caption if it adds context
+Never describe what the image would look like — just generate it.`;
   }
 }
