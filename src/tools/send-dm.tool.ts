@@ -13,7 +13,7 @@ export class SendDmTool implements AgentTool {
 
   name = 'send_dm';
   description =
-    'Deliver an administrative message or notification directly to a user\'s private chat. Use this for sensitive info, private confirmations, or when explicitly requested by an admin.';
+    'Deliver an administrative message or notification directly to a user\'s private chat. Use this for sensitive info, private confirmations, or when explicitly requested by an admin. You can pass a @username as the targetTelegramId and it will automatically resolve.';
   argsSchema = z.object({
     targetTelegramId: z.string(),
     text: z.string(),
@@ -35,7 +35,7 @@ export class SendDmTool implements AgentTool {
         properties: {
           targetTelegramId: {
             type: Type.STRING,
-            description: 'The Telegram user ID to send the DM to.',
+            description: 'The Telegram user ID to send the DM to. You can also pass a text @username (e.g. @Kamzy123) and the system will automatically resolve their numeric ID. Do not use memory search just to find an ID.',
           },
           text: {
             type: Type.STRING,

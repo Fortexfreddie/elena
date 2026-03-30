@@ -122,7 +122,9 @@ elena/
 │   │   ├── github-fetch.tool.ts             #   Octokit: get_repo / get_issues / get_file (GITHUB_TOKEN)
 │   │   ├── memory-search.tool.ts            #   Calls WarmMemoryService.search() with access control
 │   │   ├── log-monitor.tool.ts              #   error.log tail reader — redacts tokens/URLs
-│   │   ├── run-code.tool.ts                 #   Code execution (stub — sandbox not yet active)
+│   │   ├── run-code.tool.ts                 #   Code execution (vm sandbox, TS transpilation)
+│   │   ├── generate-image.tool.ts           #   Gemini Image generation with Pollinations fallback
+│   │   ├── prompt-engineer.tool.ts          #   Transforms vague ideas into structured prompts
 │   │   ├── bounty-update.tool.ts            #   Bounty CRUD via Prisma — create/update/list (HITL)
 │   │   ├── send-reminder.tool.ts            #   Creates Reminder row + BullMQ delayed job
 │   │   ├── send-dm.tool.ts                  #   DmDispatcherService wrapper — admin+ only (HITL)
@@ -144,6 +146,11 @@ elena/
 │   │
 │   ├── scheduled/                           # Background task handlers
 │   │   ├── reminder-delivery.handler.ts     #   Processes elena-scheduled queue — DM or group delivery
+│   │   ├── compress-memory.handler.ts       #   Nightly job to summarize long hot memory threads
+│   │   ├── morning-message.handler.ts       #   Sends daily motivational message to active groups
+│   │   ├── cleanup-gemini-files.handler.ts  #   Deletes stale Gemini API files older than 24h
+│   │   ├── purge-secrets.handler.ts         #   Removes expired secrets and notifies owners
+│   │   ├── scheduled.processor.ts           #   BullMQ WorkerHost mapping job names to handlers
 │   │   └── scheduled.module.ts
 │   │
 │   ├── secrets/                             # Per-user encrypted secret vault
@@ -844,13 +851,11 @@ Cloud Run sends SIGTERM before terminating. BullMQ's `WorkerHost` handles this b
 ### Not yet implemented
 
 - **Rate limiting** — `// TODO-PHASE2` comment in `WebhookController`. No per-user rate limits currently enforced.
-- **`run_code` tool** — File exists (`src/tools/run-code.tool.ts`) but the tool is not yet callable from within the sandbox; actual execution environment not confirmed.
 - **Langfuse tracing** — Keys present in `.env.example` but not wired into the agent pipeline.
 - **Feedback model** — `Feedback` table exists in Prisma schema but no write path is implemented.
 - **`HitlPending` table** — Schema exists but HITL state is stored in Redis, not this table. The table is not written to in any current code path.
 - **Secret-to-agent pipeline** — `decryptedSecretsSet` infrastructure exists but secrets are not automatically loaded for agent requests. Agents cannot currently read secret values.
 - **Warm memory writing from onboarding** — Onboarding interviews are not stored in warm memory.
-- **Nightly summarize, compress memory, cleanup Gemini files** — Defined as `RepeatableJobName` enums in `job.types.ts` but no handler implementations were found in the scan.
 
 ### Known design constraints
 

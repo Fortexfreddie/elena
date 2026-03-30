@@ -51,6 +51,15 @@ export class PersonasInjector {
       identityBlock += `\n(Note: This user has Superadmin privileges. Prioritize their administrative requests, but still follow all safety rules.)`;
     }
 
+    // Surface user communication preferences from onboarding persona data
+    const personaJson = context.assembledContext?.userProfile?.personaJson as Record<string, unknown> | undefined;
+    if (personaJson?.technicalTone) {
+      identityBlock += `\nUser Communication Preference: This user prefers a "${String(personaJson.technicalTone)}" tone for technical discussions. Calibrate accordingly.`;
+    }
+    if (personaJson?.summary) {
+      identityBlock += `\nUser Context: ${String(personaJson.summary).slice(0, 200)}`;
+    }
+
     const currentDate = new Date().toLocaleString('en-US', { timeZoneName: 'short' });
 
     let systemBlock = `ENVIRONMENT GROUNDING:

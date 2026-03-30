@@ -101,6 +101,7 @@ Elena is live when you see `Bot ID resolved: <id>` in the web logs.
 | `LOG_FILE_PATH` | No | Path to error.log file read by the `log_monitor` tool (default: `error.log`) |
 | `NGROK_AUTHTOKEN` | No | Ngrok auth token for local tunneling via Docker Compose |
 | `NGROK_DOMAIN` | No | Raw ngrok domain (no `https://`) for local testing |
+| `POLLINATIONS_API_KEY` | No | Pollinations.ai API key for fallback image generation |
 
 ---
 
@@ -232,7 +233,7 @@ Not a specialist — this is the Stage 2 router. It receives every message that 
 
 **What it does:** Coordinates, answers from memory, delegates to specialists via `delegate_task`, or calls tools directly.
 
-**Tools available:** `delegate_task`, `send_dm`, `send_reminder`, `log_monitor`, `update_user_profile`, `approve_user`, `memory_search`, `web_search`, `bounty_update`, `github_fetch`, `doc_scraper`
+**Tools available:** `delegate_task`, `send_dm`, `send_reminder`, `log_monitor`, `update_user_profile`, `approve_user`, `memory_search`, `web_search`, `bounty_update`, `github_fetch`, `doc_scraper`, `prompt_engineer`
 
 **Model:** `gemini-3-flash-preview` (Flash)
 
@@ -276,9 +277,9 @@ Not a specialist — this is the Stage 2 router. It receives every message that 
 
 **Triggers:** Factual questions, "what is X", "how does Y work", pricing/version queries, news searches.
 
-**What it does:** Searches the web via Serper, scrapes docs via Jina for full content when snippets aren't enough. Never reports prices or versions from snippets alone.
+**What it does:** Searches the web via Serper, scrapes docs via Jina for full content when snippets aren't enough. Never reports prices or versions from snippets alone. Can generate structured research prompts.
 
-**Tools:** `web_search`, `doc_scraper`, `memory_search`, `log_monitor`
+**Tools:** `web_search`, `doc_scraper`, `memory_search`, `log_monitor`, `prompt_engineer`
 
 **Model:** `gemini-3-flash-preview` (Flash)
 
@@ -292,9 +293,9 @@ Not a specialist — this is the Stage 2 router. It receives every message that 
 
 **Triggers:** Architecture discussions, "think through X", exploring approaches, design trade-offs.
 
-**What it does:** Challenges assumptions, proposes unconsidered approaches, plays devil's advocate. Gives 2–3 concrete directions with explicit trade-offs.
+**What it does:** Challenges assumptions, proposes unconsidered approaches, plays devil's advocate. Gives 2–3 concrete directions with explicit trade-offs. Can also generate images.
 
-**Tools:** `memory_search`, `web_search`, `doc_scraper`
+**Tools:** `memory_search`, `web_search`, `doc_scraper`, `prompt_engineer`, `generate_image`
 
 **Model:** `gemini-3.1-pro-preview` (Pro)
 
@@ -341,12 +342,15 @@ Not a specialist — this is the Stage 2 router. It receives every message that 
 | `github_fetch` | No | Reads GitHub repos, issues, or file contents via Octokit. Requires `GITHUB_TOKEN`. |
 | `memory_search` | No | Semantic search over Qdrant warm memory. Automatic tool (not user-triggered directly); used by agents. |
 | `log_monitor` | No | Reads the last 50-100 lines of `error.log`. Sanitizes tokens and credentials before returning. Triggered by phrases like "system logs" via TaskAgent. |
-| `run_code` | **Yes** | Proposes code execution in a sandbox. *Currently returns a stub error upon confirmation (sandbox coming in Phase 5).* |
+| `run_code` | **Yes** | Executes JavaScript/TypeScript code in an isolated `vm` sandbox with native TS transpilation. |
+| `generate_image` | No | Generates an AI image from a text prompt using Gemini or Pollinations fallback and sends it directly to the chat. |
+| `prompt_engineer` | No | Transforms vague user ideas into highly structured, detailed prompts for LLMs, image generators, or research. |
 | `send_reminder` | No | Schedules a reminder into BullMQ (`elena-scheduled` queue). Delivers to chat or DM at the scheduled time. |
 | `send_dm` | **Yes** | Sends a private DM to a user. Admin/superadmin only. Requires `/confirm_` before execution. |
 | `bounty_update` | **Yes** | Creates, updates, or lists bounties in Postgres. Requires `/confirm_` before execution. |
 | `approve_user` | **Yes** | Approves a pending onboarding application. Founders/admins only. Requires `/confirm_` before execution. |
 | `update_user_profile` | **Yes** | Promotes, demotes, or updates a user's role/name/persona. Requires `/confirm_` before execution. |
+| `save_interview` | No | Persists data from the onboarding interview. Internal use by OnboardingAgent. |
 | `delegate_task` | No | Used internally by ManagerAgent to transfer control to a specialist. Not visible to users. |
 
 **HITL-gated tools:** When Elena calls a HITL-gated tool, execution suspends immediately. Elena sends a proposal message to the chat with `/confirm_JOBID` and `/cancel_JOBID` instructions. The action is stored in Redis with a 5-minute TTL. On `/confirm_`, the `HitlProcessor` executes the tool and reports results.
@@ -573,10 +577,8 @@ Type `/confirm_chatId:abc123` to execute or `/cancel_chatId:abc123` to abort.
 Elena uses BullMQ for scheduling future tasks and background jobs.
 
 **Currently Running:**
-- `ReminderDeliveryHandler` (`elena-scheduled` queue): Delivers remainder messages to the target chat or DM at the specific time `scheduledFor` defined when the reminder was set.
-
-**Registered but Handler Not Implemented Yet (Phase 5):**
-- `nightly-summarize`
-- `purge-secrets`
-- `compress-memory`
-- `cleanup-gemini-files`
+- `ReminderDeliveryHandler` (`elena-scheduled` queue): Delivers reminder messages to the target chat or DM at the specific time `scheduledFor` defined when the reminder was set.
+- `CompressMemoryHandler`: Runs nightly to compress large hot memory threads into concise summaries saved to warm memory.
+- `CleanupGeminiFilesHandler`: Automatically deletes Gemini File API files older than 24 hours to manage quota.
+- `PurgeSecretsHandler`: Deletes expired secrets from the vault and notifies owners via DM.
+- `MorningMessageHandler`: Sends an optional motivational verse summary wrapped in Elena's personality to all active group chats.
