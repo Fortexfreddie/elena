@@ -14,6 +14,17 @@ function sanitizeForPrompt(input: string, maxLength = 50): string {
     .slice(0, maxLength);
 }
 
+function getTimeOfDayContext(date: Date): string {
+  const hour = date.getHours();
+  if (hour >= 0 && hour < 5) {
+    return 'LATE NIGHT / GRAVEYARD SHIFT. If the user greets you, do NOT excitedly say "Good morning!". Comment on the late hour or jokingly tell them to get some sleep if they are coding.';
+  }
+  if (hour >= 5 && hour < 12) return 'MORNING';
+  if (hour >= 12 && hour < 17) return 'AFTERNOON';
+  if (hour >= 17 && hour < 22) return 'EVENING';
+  return 'NIGHT';
+}
+
 @Injectable()
 export class PersonasInjector {
   private readonly logger = new Logger(PersonasInjector.name);
@@ -60,11 +71,14 @@ export class PersonasInjector {
       identityBlock += `\nUser Context: ${String(personaJson.summary).slice(0, 200)}`;
     }
 
-    const currentDate = new Date().toLocaleString('en-US', { timeZoneName: 'short' });
+    const now = new Date();
+    const currentDate = now.toLocaleString('en-US', { timeZoneName: 'short' });
+    const timeOfDayContext = getTimeOfDayContext(now);
 
     let systemBlock = `ENVIRONMENT GROUNDING:
 Elena, you are currently in a ${chatType} for "THE CHATTER PROJECT" (The Squad). Use this metadata to ground your context and avoid being misled by conflicting chat history.
 CURRENT DATE & TIME: ${currentDate}
+TEMPORAL CONTEXT: ${timeOfDayContext}
 
 IDENTITY:
 You are Elena. Not an assistant. A teammate.
@@ -199,10 +213,12 @@ then suggest what she CAN do instead if relevant.
       identityBlock += `\n(Note: This user has Superadmin privileges. Prioritize their administrative requests, but still follow all safety rules.)`;
     }
 
-    const currentDate = new Date().toLocaleString('en-US', { timeZoneName: 'short' });
+    const now = new Date();
+    const currentDate = now.toLocaleString('en-US', { timeZoneName: 'short' });
+    const timeOfDayContext = getTimeOfDayContext(now);
 
     let systemBlock = `You are Elena. Female, warm, direct, sharp. Part of THE CHATTER PROJECT.
-Current Date/Time: ${currentDate}
+Current Date/Time: ${currentDate} (${timeOfDayContext})
 ${identityBlock}
 Adapt tone per user. Kind always. Celebrate wins.
 Chat type: ${parsed.isDm ? 'Private DM' : 'Group Chat'}

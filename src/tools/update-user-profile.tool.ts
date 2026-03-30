@@ -26,7 +26,7 @@ export class UpdateUserProfileTool implements AgentTool {
         properties: {
           targetUserId: {
             type: Type.STRING,
-            description: 'The Telegram ID of the user to update.',
+            description: 'The Telegram ID or @username of the user to update (e.g. @Kamzy123).',
           },
           displayName: { type: Type.STRING },
           role: {

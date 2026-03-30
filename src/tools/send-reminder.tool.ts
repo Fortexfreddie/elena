@@ -61,7 +61,7 @@ export class SendReminderTool implements AgentTool {
           targetUserId: {
             type: Type.STRING,
             description:
-              'Numeric Telegram user ID ONLY (e.g. "1416469884"). NEVER use display names, usernames, or @handles. Must be a number. Get the exact ID from the user profile in context. Only required when targetType is "dm".',
+              'Numeric Telegram ID or @username (e.g. @Kamzy123). The system will automatically resolve usernames. Only required when targetType is "dm" and not reminding yourself.',
           },
         },
         required: ['reminderText', 'minutesFromNow', 'confirmationMessage'],
@@ -121,12 +121,27 @@ export class SendReminderTool implements AgentTool {
     }
 
     // Validate targetUserId if dm with explicit targetUserId
-    const resolvedTargetUserId =
+    let resolvedTargetUserId =
       resolvedTargetType === 'dm' && targetUserId
         ? targetUserId
         : resolvedTargetType === 'dm'
         ? requesterTelegramId
         : null;
+
+    if (resolvedTargetType === 'dm' && resolvedTargetUserId && (resolvedTargetUserId.startsWith('@') || isNaN(Number(resolvedTargetUserId)))) {
+      const cleanUsername = resolvedTargetUserId.startsWith('@') ? resolvedTargetUserId.slice(1) : resolvedTargetUserId;
+      const user = await this.prisma.user.findFirst({
+        where: { username: { equals: cleanUsername, mode: 'insensitive' } },
+        select: { telegramId: true },
+      });
+      if (!user) {
+        return {
+          success: false,
+          error: `User with username @${cleanUsername} not found. They must have an active profile.`,
+        };
+      }
+      resolvedTargetUserId = user.telegramId;
+    }
 
     const userId = context.assembledContext.userProfile?.id;
 
@@ -137,15 +152,6 @@ export class SendReminderTool implements AgentTool {
         success: false,
         error: 'minutesFromNow must be between 1 and 525600 (1 year max)',
       };
-    }
-
-    if (resolvedTargetType === 'dm' && resolvedTargetUserId) {
-      if (isNaN(Number(resolvedTargetUserId))) {
-        return {
-          success: false,
-          error: `targetUserId must be a numeric Telegram ID, not a display name or username. Received: "${resolvedTargetUserId}". Use the exact numeric Telegram ID from the user profile in context.`,
-        };
-      }
     }
 
     this.logger.log(`Scheduling reminder for user ${userId} in ${mins} mins`);

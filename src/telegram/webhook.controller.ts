@@ -206,18 +206,68 @@ export class WebhookController {
           return { ok: true };
         }
 
+        if (lower === '/roles') {
+          const rolesText = `🛡️ *Role Capabilities & Limits*\n\n`
+            + `*Superadmin (Founder)*\n`
+            + `• Manage anyone (incl. Admins)\n`
+            + `• Toggle system broadcasts (\`/morning\`)\n`
+            + `• Halt system, execute code, modify onboarding\n\n`
+            
+            + `*Admins*\n`
+            + `• Reset memory (\`/clear\`)\n`
+            + `• Manage Members & Guests\n`
+            + `• Execute secure HITL actions & run monitors\n\n`
+            
+            + `*Members*\n`
+            + `• Interact with Elena naturally\n`
+            + `• Submit PR reviews, use the secret vault\n`
+            + `• Schedule DB reminders\n`
+            + `• _Cannot_ modify system settings or other users\n\n`
+            
+            + `*Guests*\n`
+            + `• Sandboxed holding pattern\n`
+            + `• Elena drops messages without internal context until an Admin approves them via DM.\n`;
+
+          await this.replySender.sendReply(
+            String(update.message?.chat.id),
+            rolesText,
+            undefined,
+            'MarkdownV2',
+          );
+          return { ok: true };
+        }
+
         if (lower === '/manual') {
           const senderId = String(update.message?.from?.id);
           const sender = await this.prisma.user.findUnique({
             where: { telegramId: senderId },
-            select: { role: true },
+            select: { role: true, displayName: true, onboardingStatus: true, personaJson: true },
           });
  
           const isSuper = sender?.role === 'superadmin';
           const isAdmin = sender?.role === 'admin' || isSuper;
           const isDm = update.message?.chat.type === 'private';
  
-          let manual = '📖 *Elena Command Manual*\n\n';
+          let manual = '📖 *Elena Command & Role Manual*\n\n';
+
+          if (sender) {
+            const persona = sender.personaJson as Record<string, string> | null;
+            const tone = persona?.technicalTone?.trim() ? persona.technicalTone.trim() : 'None specified (General)';
+            const dispName = sender.displayName || 'Anonymous';
+            const roleStr = sender.role ? sender.role.charAt(0).toUpperCase() + sender.role.slice(1) : 'Unknown';
+            const statusStr = sender.onboardingStatus ? sender.onboardingStatus.charAt(0).toUpperCase() + sender.onboardingStatus.slice(1) : 'Unknown';
+            
+            manual += '👤 *Your Profile*\n';
+            manual += `• *Name:* ${dispName}\n`;
+            manual += `• *Role:* ${roleStr}\n`;
+            manual += `• *Status:* ${statusStr}\n`;
+            manual += `• *Preference:* ${tone}\n\n`;
+          } else {
+            manual += '👤 *Your Profile*\n• *Role:* Unknown (Not registered)\n\n';
+          }
+
+          manual += '🛠️ *Commands*\n';
+          manual += '• `/roles` — See what each user role is permitted to do.\n';
           manual += '• `/claim-admin` — Register as an administrator (if eligible).\n';
           
           if (isAdmin) {
@@ -572,6 +622,17 @@ export class WebhookController {
             senderId,
             `🗑️ Secret *${label}* deleted.`,
             undefined,
+            'MarkdownV2',
+          );
+          return { ok: true };
+        }
+
+        // Catch-all for unknown slash commands
+        if (lower.startsWith('/')) {
+          await this.replySender.sendReply(
+            String(update.message?.chat.id),
+            `Elena doesn't recognize that command. Type \`/manual\` to see what I can do\\.`,
+            update.message?.message_id,
             'MarkdownV2',
           );
           return { ok: true };
