@@ -85,4 +85,35 @@ export class HotMemoryService {
       await this.redisService.client.del(lockKey);
     }
   }
+
+  /**
+   * Safely remove the first N messages from history using a lock.
+   * Prevents race conditions during memory compression.
+   */
+  async removeOldest(chatId: string, count: number): Promise<void> {
+    const lockKey = `hot:lock:${chatId}`;
+    const acquired = await this.redisService.client.set(lockKey, '1', {
+      nx: true,
+      ex: 5,
+    });
+
+    if (!acquired) {
+      await sleep(100);
+      const retry = await this.redisService.client.set(lockKey, '1', {
+        nx: true,
+        ex: 5,
+      });
+      if (!retry) return; // Drop if highly contested
+    }
+
+    try {
+      const history = await this.getHistory(chatId);
+      if (history.length === 0) return;
+      
+      const remainder = history.slice(count);
+      await this.saveHistory(chatId, remainder);
+    } finally {
+      await this.redisService.client.del(lockKey);
+    }
+  }
 }

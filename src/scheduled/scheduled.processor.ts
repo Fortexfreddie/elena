@@ -6,6 +6,7 @@ import { ReminderDeliveryHandler } from './reminder-delivery.handler';
 import { PurgeSecretsHandler } from './purge-secrets.handler';
 import { CompressMemoryHandler } from './compress-memory.handler';
 import { CleanupGeminiFilesHandler } from './cleanup-gemini-files.handler';
+import { MorningMessageHandler } from './morning-message.handler';
 
 @Processor(QUEUE_NAMES.SCHEDULED, {
   concurrency: 3,
@@ -19,6 +20,7 @@ export class ScheduledProcessor extends WorkerHost {
     private readonly purgeHandler: PurgeSecretsHandler,
     private readonly compressHandler: CompressMemoryHandler,
     private readonly cleanupHandler: CleanupGeminiFilesHandler,
+    private readonly morningHandler: MorningMessageHandler,
   ) {
     super();
   }
@@ -37,6 +39,8 @@ export class ScheduledProcessor extends WorkerHost {
         return this.compressHandler.handle(job);
       case 'cleanup-gemini-files':
         return this.cleanupHandler.handle(job);
+      case 'morning-message':
+        return this.morningHandler.handle(job);
       default:
         this.logger.warn(
           `[SCHEDULED] Unknown job name: ${job.name} — skipping`,

@@ -286,6 +286,28 @@ export class GeminiService {
   }
 
   /**
+   * List all uploaded files in the Gemini File API.
+   * Used by the nightly cleanup handler.
+   */
+  async listFiles(): Promise<{ name?: string; createTime?: string }[]> {
+    try {
+      const response = await this.ai.files.list();
+      const allFiles: { name?: string; createTime?: string }[] = [];
+      
+      // Response from @google/genai ai.files.list() is an async iterable Pager
+      for await (const file of response) {
+        allFiles.push({ name: file.name, createTime: file.createTime });
+      }
+      
+      return allFiles;
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown list files error';
+      throw new ModelError(`Failed to list Gemini files: ${message}`);
+    }
+  }
+
+  /**
    * Generate an image using Gemini image generation model.
    * Returns base64 encoded image data and mime type.
    * Returns null if generation fails or no image in response.

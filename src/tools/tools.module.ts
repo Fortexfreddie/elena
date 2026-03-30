@@ -24,6 +24,7 @@ import { PersonasModule } from '../personas/personas.module';
 import { AuditModule } from '../audit/audit.module';
 import { forwardRef } from '@nestjs/common';
 import { GeminiModule } from '@app/common';
+import { SecretsModule } from '../secrets/secrets.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { GeminiModule } from '@app/common';
     PrismaModule,
     PersonasModule,
     AuditModule,
+    forwardRef(() => SecretsModule),
     forwardRef(() => TelegramModule),
     forwardRef(() => QueueModule),
   ],

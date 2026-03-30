@@ -72,4 +72,4 @@ brain/
 /tmp/
 
 # Test files
-test-serper.ts
+/scripts/*.ts

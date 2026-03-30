@@ -33,6 +33,7 @@ export abstract class BaseAgent {
 
   protected buildSystemInstruction(context: AgentContext): string {
     const base = this.personasInjector.inject(context, this.getRoleInstruction());
+
     const toolAwareness = `
 
 TOOL CALL AWARENESS:
@@ -106,6 +107,7 @@ TELEGRAM FORMATTING RULES (strictly follow these):
           this.logger.log(
             `[EXECUTION_TRACE] Agent '${this.name}' completed in ${latencyMs}ms using model '${response.model}'. Tools called: ${toolsCalled.length > 0 ? toolsCalled.join(', ') : 'None'}`,
           );
+
           return {
             text: response.text,
             agentName: this.name,

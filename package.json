@@ -27,7 +27,8 @@
     "db:init": "npx prisma migrate dev --name init",
     "db:clean": "npx prisma migrate reset --force && npx prisma generate",
     "db:nuke": "pnpm run db:clean && ts-node scripts/reset-all.ts",
-    "webhook:set": "ts-node scripts/set-webhook.ts"
+    "webhook:set": "ts-node scripts/set-webhook.ts",
+    "test:morning": "ts-node -r tsconfig-paths/register scripts/test-morning.ts"
   },
   "dependencies": {
     "@google/genai": "^1.44.0",
@@ -56,6 +57,7 @@
     "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "typescript": "^5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -83,7 +85,6 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5",
     "typescript-eslint": "^8.20.0"
   },
   "jest": {

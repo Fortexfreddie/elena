@@ -152,6 +152,18 @@ export class QueueService {
       },
     );
 
+    // Morning message — runs daily at 8am
+    await this.scheduledQueue.add(
+      'morning-message',
+      {},
+      {
+        repeat: { pattern: '0 8 * * *' }, // 8am daily
+        jobId: 'morning-message-repeatable',
+        removeOnComplete: { count: 5 },
+        removeOnFail: { count: 10 },
+      },
+    );
+
     this.logger.log('[QUEUE] Repeatable jobs registered');
   }
 }

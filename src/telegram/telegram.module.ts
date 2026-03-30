@@ -13,6 +13,7 @@ import { AuditModule } from '../audit/audit.module';
 import { PrismaModule } from '@app/database';
 import { UserGroupService } from './user-group.service';
 import { SecurityAlertService } from './security-alert.service';
+import { RateLimiterService } from './rate-limiter.service';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SecurityAlertService } from './security-alert.service';
     ReactionSenderService,
     SecurityAlertService,
     UserGroupService,
+    RateLimiterService,
   ],
   exports: [
     ReplySenderService,
@@ -39,6 +41,7 @@ import { SecurityAlertService } from './security-alert.service';
     DmDispatcherService,
     SecurityAlertService,
     UserGroupService,
+    RateLimiterService,
   ],
 })
 export class TelegramModule {}

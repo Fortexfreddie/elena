@@ -23,6 +23,7 @@ import { VaultService } from '../secrets/vault.service';
 import { SecurityAlertService } from './security-alert.service';
 import { JailbreakDetectorService } from '../safety/jailbreak-detector.service';
 import { AuditLoggerService } from '../audit/audit-logger.service';
+import { RateLimiterService } from './rate-limiter.service';
 
 /**
  * Webhook controller for incoming Telegram updates.
@@ -56,6 +57,7 @@ export class WebhookController {
     private readonly securityAlert: SecurityAlertService,
     private readonly jailbreakDetector: JailbreakDetectorService,
     private readonly auditLogger: AuditLoggerService,
+    private readonly rateLimiter: RateLimiterService,
     @Inject(forwardRef(() => ClaimAdminCommand))
     private readonly claimAdmin: ClaimAdminCommand,
   ) {}
@@ -204,6 +206,48 @@ export class WebhookController {
           return { ok: true };
         }
 
+        if (lower === '/manual') {
+          const senderId = String(update.message?.from?.id);
+          const sender = await this.prisma.user.findUnique({
+            where: { telegramId: senderId },
+            select: { role: true },
+          });
+ 
+          const isSuper = sender?.role === 'superadmin';
+          const isAdmin = sender?.role === 'admin' || isSuper;
+          const isDm = update.message?.chat.type === 'private';
+ 
+          let manual = '📖 *Elena Command Manual*\n\n';
+          manual += '• `/claim-admin` — Register as an administrator (if eligible).\n';
+          
+          if (isAdmin) {
+            manual += '• `/clear` — Wipe my short-term memory for this chat.\n';
+            manual += '• `/halt` — Emergency stop (prevents processing for 1 hour).\n';
+            manual += '• `/resume` — Restore processing after a halt.\n';
+          }
+          
+          if (isSuper) {
+            manual += '• `/morning on/off` — Toggle my daily motivation broadcast.\n';
+          }
+ 
+          if (isDm) {
+            manual += '\n🔐 *Secret Management (DM Only)*\n';
+            manual += '• `/secret LABEL VALUE` — Securely encrypt and store a secret.\n';
+            manual += '• `/secrets` — List your stored secret labels.\n';
+            manual += '• `/delete-secret LABEL` — Permanently remove a secret.\n';
+          } else {
+            manual += '\n💡 *Tip:* Message me in DM to manage your `/secrets` privately.';
+          }
+ 
+          await this.replySender.sendReply(
+            String(update.message?.chat.id),
+            manual,
+            undefined,
+            'MarkdownV2',
+          );
+          return { ok: true };
+        }
+ 
         if (lower === '/claim-admin') {
           const from = update.message?.from;
           if (from) {
@@ -238,12 +282,64 @@ export class WebhookController {
 
           const chatId = String(update.message?.chat.id);
           await this.redisService.client.del(`hot:${chatId}`);
+          
+          this.logger.log(`[CLEAR] Memory cleared for chat ${chatId} by admin ${senderId}`);
+          await this.auditLogger.log({
+            actionType: 'memory_clear',
+            telegramId: senderId,
+            sanitizedSummary: `Memory cleared for chat ${chatId}`,
+          });
+
           await this.replySender.sendReply(
             chatId,
             "🗑️ Elena's hot memory cleared. Context reset to Day 1.",
             undefined,
             null,
           );
+          return { ok: true };
+        }
+
+        if (lower === '/morning on' || lower === '/morning off') {
+          const senderId = String(update.message?.from?.id);
+          const sender = await this.prisma.user.findUnique({
+            where: { telegramId: senderId },
+            select: { role: true },
+          });
+
+          // Phase 6: Superadmin only
+          if (!sender || sender.role !== 'superadmin') {
+            return { ok: true }; // Silent drop for non-superadmin
+          }
+
+          if (lower === '/morning on') {
+            await this.redisService.client.set('elena:morning:enabled', '1');
+            this.logger.log(`[CONFIG] Morning messages enabled by superadmin ${senderId}`);
+            await this.auditLogger.log({
+              actionType: 'config_change',
+              telegramId: senderId,
+              sanitizedSummary: 'Morning messages enabled',
+            });
+            await this.replySender.sendReply(
+              String(update.message?.chat.id),
+              '✅ Morning messages enabled. Will fire daily at 8am.',
+              undefined,
+              null,
+            );
+          } else {
+            await this.redisService.client.del('elena:morning:enabled');
+            this.logger.log(`[CONFIG] Morning messages disabled by superadmin ${senderId}`);
+            await this.auditLogger.log({
+              actionType: 'config_change',
+              telegramId: senderId,
+              sanitizedSummary: 'Morning messages disabled',
+            });
+            await this.replySender.sendReply(
+              String(update.message?.chat.id),
+              '🛑 Morning messages disabled.',
+              undefined,
+              null,
+            );
+          }
           return { ok: true };
         }
 
@@ -258,9 +354,28 @@ export class WebhookController {
             return { ok: true }; // Silent drop
           }
 
+          // Check current state for idempotency
+          const currentHalt = await this.redisService.client.get('elena:halt');
+          if (currentHalt) {
+            await this.replySender.sendReply(
+              String(update.message?.chat.id),
+              '⚠️ Elena is already halted.',
+              undefined,
+              null,
+            );
+            return { ok: true };
+          }
+
           // Set halt flag in Redis — MessageProcessor checks this flag
           await this.redisService.client.set('elena:halt', '1', { ex: 3600 });
           
+          this.logger.warn(`[HALT] System EMERGENCY STOP triggered by admin ${senderId}`);
+          await this.auditLogger.log({
+            actionType: 'system_halt',
+            telegramId: senderId,
+            sanitizedSummary: 'System halted via /halt command',
+          });
+
           await this.replySender.sendReply(
             String(update.message?.chat.id),
             '🛑 Elena halted. No new messages will be processed for 1 hour. Use /resume to restore.',
@@ -281,8 +396,27 @@ export class WebhookController {
             return { ok: true };
           }
 
+          // Check current state for idempotency
+          const currentHalt = await this.redisService.client.get('elena:halt');
+          if (!currentHalt) {
+            await this.replySender.sendReply(
+              String(update.message?.chat.id),
+              '⚠️ Elena is already online and active.',
+              undefined,
+              null,
+            );
+            return { ok: true };
+          }
+
           await this.redisService.client.del('elena:halt');
           
+          this.logger.log(`[HALT] System RESUMED by admin ${senderId}`);
+          await this.auditLogger.log({
+            actionType: 'system_resume',
+            telegramId: senderId,
+            sanitizedSummary: 'System resumed via /resume command',
+          });
+
           await this.replySender.sendReply(
             String(update.message?.chat.id),
             '✅ Elena resumed. Back online.',
@@ -544,8 +678,18 @@ export class WebhookController {
         }
       }
 
-      // Step 4: Rate limiting (Phase 2+)
-      // TODO-PHASE2: RateLimiterService check here
+      // Step 4: Rate limiting (Phase 6)
+      const rateLimit = await this.rateLimiter.check(parsed.userId);
+      if (!rateLimit.allowed) {
+        this.logger.warn(`[RATE_LIMIT] Blocking request from ${parsed.userId}. Too many requests.`);
+        await this.replySender.sendReply(
+          parsed.chatId,
+          `Whoa! Slow down 😅 — give me a moment to breathe. Try again in about ${rateLimit.remaining > 0 ? rateLimit.remaining : 60} seconds.`,
+          undefined,
+          null,
+        );
+        return { ok: true };
+      }
 
       // Step 5: Send thinking reaction
       if (parsed.rawUpdate.message) {
