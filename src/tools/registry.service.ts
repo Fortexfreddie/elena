@@ -18,6 +18,8 @@ import { LogMonitorTool } from './log-monitor.tool';
 import { DelegateTaskTool } from './delegate-task.tool';
 import { SaveInterviewTool } from './save-interview.tool';
 import { UpdateUserProfileTool } from './update-user-profile.tool';
+import { UpdateUserPreferencesTool } from './update-user-preferences.tool';
+import { ViewUserProfileTool } from './view-user-profile.tool';
 import { ApproveUserTool } from './approve-user.tool';
 import { PromptEngineerTool } from './prompt-engineer.tool';
 import { GenerateImageTool } from './generate-image.tool';
@@ -46,9 +48,11 @@ export class RegistryService implements OnModuleInit {
     private readonly webSearchTool: WebSearchTool,
     private readonly logMonitorTool: LogMonitorTool,
     private readonly delegateTaskTool: DelegateTaskTool,
-    private readonly saveInterviewTool: SaveInterviewTool,
-    private readonly updateUserProfileTool: UpdateUserProfileTool,
-    private readonly approveUserTool: ApproveUserTool,
+    private readonly saveInterview: SaveInterviewTool,
+    private readonly updateUserProfile: UpdateUserProfileTool,
+    private readonly updateUserPreferences: UpdateUserPreferencesTool,
+    private readonly viewUserProfile: ViewUserProfileTool,
+    private readonly approveUser: ApproveUserTool,
     private readonly promptEngineerTool: PromptEngineerTool,
     @Inject(forwardRef(() => GenerateImageTool))
     private readonly generateImageTool: GenerateImageTool,
@@ -66,9 +70,11 @@ export class RegistryService implements OnModuleInit {
     this.registerTool(this.webSearchTool);
     this.registerTool(this.logMonitorTool);
     this.registerTool(this.delegateTaskTool);
-    this.registerTool(this.saveInterviewTool);
-    this.registerTool(this.updateUserProfileTool);
-    this.registerTool(this.approveUserTool);
+    this.registerTool(this.saveInterview);
+    this.registerTool(this.updateUserProfile);
+    this.registerTool(this.updateUserPreferences);
+    this.registerTool(this.viewUserProfile);
+    this.registerTool(this.approveUser);
     this.registerTool(this.promptEngineerTool);
     this.registerTool(this.generateImageTool);
   }

@@ -35,6 +35,10 @@ export class SaveInterviewTool implements AgentTool {
             type: Type.STRING,
             description: 'A brief summary of the user and why they are joining.',
           },
+          timezone: {
+            type: Type.STRING,
+            description: 'The timezone of the user if provided (e.g. UTC, EST, Africa/Lagos).',
+          },
         },
         required: ['displayName', 'role', 'technicalTone', 'summary'],
       },

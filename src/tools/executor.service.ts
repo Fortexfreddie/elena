@@ -81,7 +81,16 @@ export class ExecutorService {
       );
 
       // Send proposal message to Telegram
-      const argsSummary = Object.entries(call.args as any)
+      const argsArray = Object.entries(call.args as any);
+      
+      // Sort: Put 'actionJustification' at the top, others follow
+      argsArray.sort(([k1], [k2]) => {
+        if (k1 === 'actionJustification') return -1;
+        if (k2 === 'actionJustification') return 1;
+        return 0;
+      });
+
+      const argsSummary = argsArray
         .map(([k, v]) => `• <b>${k}</b>: <code>${escapeHtml(String(v))}</code>`)
         .join('\n');
 

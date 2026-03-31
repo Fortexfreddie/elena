@@ -13,6 +13,8 @@ import { LogMonitorTool } from './log-monitor.tool';
 import { DelegateTaskTool } from './delegate-task.tool';
 import { SaveInterviewTool } from './save-interview.tool';
 import { UpdateUserProfileTool } from './update-user-profile.tool';
+import { UpdateUserPreferencesTool } from './update-user-preferences.tool';
+import { ViewUserProfileTool } from './view-user-profile.tool';
 import { ApproveUserTool } from './approve-user.tool';
 import { PromptEngineerTool } from './prompt-engineer.tool';
 import { GenerateImageTool } from './generate-image.tool';
@@ -52,10 +54,12 @@ import { SecretsModule } from '../secrets/secrets.module';
     DelegateTaskTool,
     SaveInterviewTool,
     UpdateUserProfileTool,
+    UpdateUserPreferencesTool,
+    ViewUserProfileTool,
     ApproveUserTool,
     PromptEngineerTool,
     GenerateImageTool,
   ],
-  exports: [RegistryService, ExecutorService, SaveInterviewTool, UpdateUserProfileTool, ApproveUserTool],
+  exports: [RegistryService, ExecutorService, SaveInterviewTool, UpdateUserProfileTool, UpdateUserPreferencesTool, ApproveUserTool],
 })
 export class ToolsModule {}

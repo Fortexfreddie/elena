@@ -49,8 +49,11 @@ export class ProfileBuilder {
           role: 'member', // Promote from guest
           personaJson: {
             role: profileData.role,
-            technicalTone: profileData.technicalTone,
             summary: profileData.summary,
+          },
+          preferencesJson: {
+            technicalTone: profileData.technicalTone,
+            timezone: profileData.timezone,
           },
         },
       });

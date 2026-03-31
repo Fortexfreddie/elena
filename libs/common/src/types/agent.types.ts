@@ -62,14 +62,30 @@ export interface WarmResult {
   metadata: Record<string, unknown>;
 }
 
+export interface PersonaData {
+  summary?: string;
+  coreSkills?: string;
+  pronouns?: string;
+  [key: string]: unknown;
+}
+
+export interface PreferenceData {
+  technicalTone?: string;
+  preferredLanguage?: string;
+  verbosityLevel?: string;
+  allowProactiveDms?: boolean;
+  timezone?: string;
+  [key: string]: unknown;
+}
+
 export interface UserProfile {
   id: string;
   telegramId: string;
   username: string | null;
   displayName: string;
   role: string;
-  personaJson: Record<string, unknown>;
-  preferencesJson: Record<string, unknown>;
+  personaJson: PersonaData;
+  preferencesJson: PreferenceData;
 }
 
 export interface BountyInfo {
@@ -109,6 +125,7 @@ export const SaveInterviewArgsSchema = z.object({
   role: z.string().min(1),
   technicalTone: z.string().min(1),
   summary: z.string().min(1),
+  timezone: z.string().optional(),
 });
 
 export type SaveInterviewArgs = z.infer<typeof SaveInterviewArgsSchema>;
@@ -117,14 +134,30 @@ export type SaveInterviewArgs = z.infer<typeof SaveInterviewArgsSchema>;
  * Arguments for updating a user's profile.
  */
 export const UpdateUserProfileArgsSchema = z.object({
-  targetUserId: z.string().describe('The Telegram ID of the user to update.'),
+  targetUserId: z.string().describe('The Telegram ID of the user to update (leave blank for self).').optional(),
   displayName: z.string().optional(),
   role: z.enum(['superadmin', 'admin', 'member', 'guest']).optional(),
-  summary: z.string().optional(),
-  technicalTone: z.string().optional(),
+  personaSummary: z.string().describe('Target user\'s profile summary. DO NOT include if you are not modifying it.').optional(),
+  coreSkills: z.string().describe('A comma-separated list of the user\'s core skills or stacks.').optional(),
+  pronouns: z.string().describe('User\'s pronouns (e.g. they/them, she/her).').optional(),
+  actionJustification: z.string().describe('A brief explanation of why this action is being taken (shows in HITL log).').optional(),
 });
 
 export type UpdateUserProfileArgs = z.infer<typeof UpdateUserProfileArgsSchema>;
+
+/**
+ * Arguments for updating a user's preferences.
+ */
+export const UpdateUserPreferencesArgsSchema = z.object({
+  targetUserId: z.string().describe('The Telegram ID of the user to update (leave blank for self).').optional(),
+  technicalTone: z.string().optional(),
+  preferredLanguage: z.string().optional(),
+  verbosityLevel: z.string().optional(),
+  allowProactiveDms: z.boolean().describe('Can Elena initiate DMs without being prompted first?').optional(),
+  timezone: z.string().describe('E.g. UTC, PST, Africa/Lagos.').optional(),
+});
+
+export type UpdateUserPreferencesArgs = z.infer<typeof UpdateUserPreferencesArgsSchema>;
 
 /**
  * Result from a tool execution.

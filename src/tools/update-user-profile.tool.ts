@@ -11,7 +11,7 @@ import { OnboardingStatus, UserRole, Prisma } from '@prisma/client';
 export class UpdateUserProfileTool implements AgentTool {
   private readonly logger = new Logger(UpdateUserProfileTool.name);
   name = 'update_user_profile';
-  description = 'Update a user\'s profile details. Limits: 1 Superadmin, 2 Admins total. Superadmin cannot be downgraded. Downgrading to guest resets onboarding.';
+  description = 'Update a user\'s core identity Profile (role, name, summary, skills). DO NOT use this for communication preferences or behavior rules. ALWAYS use view_user_profile to read the existing summary before updating it to avoid accidental deletion.';
   argsSchema = UpdateUserProfileArgsSchema;
   requiresConfirmation = true;
 
@@ -26,17 +26,31 @@ export class UpdateUserProfileTool implements AgentTool {
         properties: {
           targetUserId: {
             type: Type.STRING,
-            description: 'The Telegram ID or @username of the user to update (e.g. @Kamzy123).',
+            description: 'The Telegram ID or @username of the user to update (leave blank for self).',
           },
           displayName: { type: Type.STRING },
           role: {
             type: Type.STRING,
             enum: ['superadmin', 'admin', 'member', 'guest'],
           },
-          summary: { type: Type.STRING },
-          technicalTone: { type: Type.STRING },
+          personaSummary: { 
+            type: Type.STRING,
+            description: 'Target user\'s profile summary. ONLY include this if you are actively changing it. Do NOT copy existing data into here.'
+          },
+          coreSkills: {
+            type: Type.STRING,
+            description: 'A comma-separated list of the user\'s core skills or stacks.',
+          },
+          pronouns: {
+            type: Type.STRING,
+            description: 'User\'s pronouns (e.g. they/them, she/her).',
+          },
+          actionJustification: {
+            type: Type.STRING,
+            description: 'A brief explanation of why you are taking this action. Will be shown to the admin.',
+          },
         },
-        required: ['targetUserId'],
+        required: [],
       },
     };
   }
@@ -45,32 +59,35 @@ export class UpdateUserProfileTool implements AgentTool {
     args: Record<string, unknown>,
     context: AgentContext,
   ): Promise<ToolResult> {
-    const targetUserId = args['targetUserId'] as string;
+    const targetUserId = args['targetUserId'] as string | undefined;
     const displayName = args['displayName'] as string | undefined;
     const role = args['role'] as string | undefined;
-    const summary = args['summary'] as string | undefined;
-    const technicalTone = args['technicalTone'] as string | undefined;
+    const personaSummary = args['personaSummary'] as string | undefined;
+    const coreSkills = args['coreSkills'] as string | undefined;
+    const pronouns = args['pronouns'] as string | undefined;
     const requester = context.assembledContext.userProfile;
 
     if (!requester) {
       return { success: false, error: 'Requester profile not found.' };
     }
 
+    const safeTargetUserId = targetUserId || requester.telegramId;
+
     // 1. Fetch target user
     let targetUser = await this.prisma.user.findUnique({
-      where: { telegramId: targetUserId },
+      where: { telegramId: safeTargetUserId },
     });
 
     // If not found, try lookup by username (handle @ prefix)
     if (!targetUser) {
-      const cleanUsername = targetUserId.startsWith('@') ? targetUserId.slice(1) : targetUserId;
+      const cleanUsername = safeTargetUserId.startsWith('@') ? safeTargetUserId.slice(1) : safeTargetUserId;
       targetUser = await this.prisma.user.findFirst({
         where: { username: { equals: cleanUsername, mode: 'insensitive' } },
       });
     }
 
     if (!targetUser) {
-      return { success: false, error: `User with ID or Username ${targetUserId} not found.` };
+      return { success: false, error: `User with ID or Username ${safeTargetUserId} not found.` };
     }
 
     // Update targetUserId to the actual numeric ID for the rest of the logic
@@ -82,20 +99,35 @@ export class UpdateUserProfileTool implements AgentTool {
     const isRequesterAdmin = requester.role === UserRole.admin;
     const isSelfUpdate = requester.telegramId === actualTargetId;
 
-    // Rule: Non-admins can only update their own displayName/technicalTone
+    // Rule: Admins cannot update Superadmins at all
+    if (isRequesterAdmin && targetUser.role === UserRole.superadmin) {
+      if (!isSelfUpdate) {
+        return { success: false, error: 'Permission denied. Admins cannot modify or demote the Superadmin (Creator).' };
+      }
+    }
+
+    // Rule: Non-admins can only update their own profile
     if (!isRequesterSuper && !isRequesterAdmin && !isSelfUpdate) {
       return { success: false, error: 'Permission denied. You can only update your own profile.' };
     }
 
     if (!isRequesterSuper && !isRequesterAdmin && isSelfUpdate) {
-      if (role || summary) {
-        return { success: false, error: 'Permission denied. You can only update your displayName and technicalTone.' };
+      if (role) {
+        return { success: false, error: 'Permission denied. You cannot update your own role.' };
       }
     }
 
-    // Rule: Admins cannot update Superadmins
-    if (isRequesterAdmin && targetUser.role === UserRole.superadmin) {
-      return { success: false, error: 'Permission denied. Admins cannot modify the Superadmin (Creator).' };
+    // Rule: NO ONE can update personal identity features of other users
+    if (!isSelfUpdate) {
+      const existingPersona = (targetUser.personaJson as Record<string, any>) || {};
+      
+      const isChangingSummary = personaSummary !== undefined && personaSummary.trim() !== String(existingPersona.summary || '').trim();
+      const isChangingSkills = coreSkills !== undefined && coreSkills.trim() !== String(existingPersona.coreSkills || '').trim();
+      const isChangingPronouns = pronouns !== undefined && pronouns.trim() !== String(existingPersona.pronouns || '').trim();
+      
+      if (isChangingSummary || isChangingSkills || isChangingPronouns) {
+        return { success: false, error: 'Permission denied. Personal details (summary, skills, pronouns) can only be updated by the individual user themselves.' };
+      }
     }
 
     // Rule: Cannot downgrade Superadmin
@@ -144,12 +176,13 @@ export class UpdateUserProfileTool implements AgentTool {
     const existingPersona = (targetUser.personaJson as Record<string, any>) || {};
     const newPersona = { ...existingPersona };
 
-    if (summary) newPersona.summary = summary;
-    if (technicalTone) newPersona.technicalTone = technicalTone;
+    if (personaSummary !== undefined) newPersona.summary = personaSummary;
+    if (coreSkills !== undefined) newPersona.coreSkills = coreSkills;
+    if (pronouns !== undefined) newPersona.pronouns = pronouns;
 
-    updateData.personaJson = newPersona;
-
-    // Role and Onboarding Logic
+    if (Object.keys(newPersona).length > 0) {
+      updateData.personaJson = newPersona;
+    } // Role and Onboarding Logic
     if (role === 'guest') {
       updateData.role = UserRole.guest;
       updateData.onboardingStatus = OnboardingStatus.denied; // Triggers "unknown" state in detector

@@ -41,7 +41,7 @@ export class FilterAgent {
     parsed: ParsedMessage,
     hotMessages: HotMemoryEntry[] = [],
     mediaContent?: Part,
-    userProfile?: { displayName?: string; role?: string } | null,
+    userProfile?: { displayName?: string; role?: string; personaJson?: unknown; preferencesJson?: unknown } | null,
   ): Promise<FilterDecision> {
     const messageText = parsed.text ?? '[media message]';
 

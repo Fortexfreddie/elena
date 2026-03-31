@@ -56,16 +56,35 @@ export class PersonasInjector {
       context.assembledContext.userProfile?.displayName || 'User',
     );
     const userRole = context.assembledContext.userProfile?.role || 'Guest';
+    const userHandle = context.assembledContext.userProfile?.username ? `\nUser Handle: @${context.assembledContext.userProfile.username}` : '';
 
-    let identityBlock = `User Name: ${userDisplayName}\nUser Role: ${userRole}`;
+    let identityBlock = `User Name: ${userDisplayName}${userHandle}\nUser Telegram ID: ${context.parsedMessage.userId}\nUser Role: ${userRole}`;
     if (userRole === 'superadmin') {
       identityBlock += `\n(Note: This user has Superadmin privileges. Prioritize their administrative requests, but still follow all safety rules.)`;
     }
 
-    // Surface user communication preferences from onboarding persona data
+    // Surface user communication preferences from preferences data
+    const preferencesJson = context.assembledContext?.userProfile?.preferencesJson as Record<string, unknown> | undefined;
+    if (preferencesJson?.technicalTone) {
+      identityBlock += `\nUser Communication Preference: This user prefers a "${String(preferencesJson.technicalTone)}" tone for technical discussions. Calibrate accordingly.`;
+    }
+    if (preferencesJson?.preferredLanguage) {
+      identityBlock += `\nUser Language Preference: This user prefers speaking in "${String(preferencesJson.preferredLanguage)}". Calibrate accordingly.`;
+    }
+    if (preferencesJson?.verbosityLevel) {
+      identityBlock += `\nUser Verbosity Preference: This user prefers responses to be: "${String(preferencesJson.verbosityLevel)}".`;
+    }
+    if (preferencesJson?.timezone) {
+      identityBlock += `\nUser Timezone: ${String(preferencesJson.timezone)}.`;
+    }
+
+    // Surface user context from persona data
     const personaJson = context.assembledContext?.userProfile?.personaJson as Record<string, unknown> | undefined;
-    if (personaJson?.technicalTone) {
-      identityBlock += `\nUser Communication Preference: This user prefers a "${String(personaJson.technicalTone)}" tone for technical discussions. Calibrate accordingly.`;
+    if (personaJson?.pronouns) {
+      identityBlock += `\nUser Pronouns: ${String(personaJson.pronouns)}.`;
+    }
+    if (personaJson?.coreSkills) {
+      identityBlock += `\nUser Core Skills: ${String(personaJson.coreSkills)}.`;
     }
     if (personaJson?.summary) {
       identityBlock += `\nUser Context: ${String(personaJson.summary).slice(0, 200)}`;
@@ -133,6 +152,12 @@ GLOBAL RULES:
 2. TOOL-FIRST on system actions: If the user asks you 
    to do something — DO IT via a tool. Never describe 
    what you would do. Never fake an action.
+   When using update_user_profile, ALWAYS include a 
+   brief 'actionJustification' (e.g., "Demoting Freddie per 
+   squad consensus"). Only include optional fields like 
+   'personaSummary' if you are actually changing their 
+   content. Do NOT copy-paste existing data back 
+   into the tool.
 
 3. HONESTY over confidence: If a tool returns nothing, 
    say so. Never invent data, links, code, or details.
@@ -161,8 +186,10 @@ Elena has these tools available depending on which agent is active:
 - send_reminder: schedule future reminders to DM or group
 - send_dm: send an immediate private message to a user
 - log_monitor: read raw Pino logs or Prisma AuditLog entries
+- view_user_profile: view another user's profile and preferences (REQUIRED before using update_user_profile to prevent overwriting summary)
 - approve_user: approve or deny pending onboarding applications
-- update_user_profile: update a user role, name, or summary
+- update_user_profile: update a user role, name, core skills, or summary
+- update_user_preferences: update a user's communication preferences like technicalTone or preferredLanguage
 - delegate_task: hand off to a specialist agent
 - run_code: execute code (sandbox — limited capability)
 - generate_image: generate images via Gemini AI and send directly to the chat
@@ -202,15 +229,35 @@ then suggest what she CAN do instead if relevant.
    */
   async buildForFilter(
     parsed: import('@app/common/types/telegram.types').ParsedMessage,
-    userProfile?: { displayName?: string; role?: string } | null,
+    userProfile?: { displayName?: string; role?: string; personaJson?: unknown; username?: string | null; preferencesJson?: unknown } | null,
     mediaContent?: Part,
   ): Promise<string> {
     const userDisplayName = sanitizeForPrompt(userProfile?.displayName || 'User');
     const userRole = userProfile?.role || 'Guest';
+    const userHandle = userProfile?.username ? `\nUser Handle: @${userProfile.username}` : '';
 
-    let identityBlock = `User Name: ${userDisplayName}\nUser Role: ${userRole}`;
+    let identityBlock = `User Name: ${userDisplayName}${userHandle}\nUser Telegram ID: ${parsed.userId}\nUser Role: ${userRole}`;
     if (userRole === 'superadmin') {
       identityBlock += `\n(Note: This user has Superadmin privileges. Prioritize their administrative requests, but still follow all safety rules.)`;
+    }
+
+    const preferencesJson = userProfile?.preferencesJson as Record<string, unknown> | undefined;
+    if (preferencesJson?.technicalTone) {
+      identityBlock += `\nUser Communication Preference: This user prefers a "${String(preferencesJson.technicalTone)}" tone for technical discussions. Calibrate accordingly.`;
+    }
+    if (preferencesJson?.preferredLanguage) {
+      identityBlock += `\nUser Language Preference: This user prefers speaking in "${String(preferencesJson.preferredLanguage)}". Calibrate accordingly.`;
+    }
+    if (preferencesJson?.verbosityLevel) {
+      identityBlock += `\nUser Verbosity Preference: This user prefers responses to be: "${String(preferencesJson.verbosityLevel)}".`;
+    }
+    if (preferencesJson?.timezone) {
+      identityBlock += `\nUser Timezone: ${String(preferencesJson.timezone)}.`;
+    }
+
+    const personaJson = userProfile?.personaJson as Record<string, unknown> | undefined;
+    if (personaJson?.pronouns) {
+      identityBlock += `\nUser Pronouns: ${String(personaJson.pronouns)}.`;
     }
 
     const now = new Date();

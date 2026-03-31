@@ -130,6 +130,7 @@ elena/
 │   │   ├── send-dm.tool.ts                  #   DmDispatcherService wrapper — admin+ only (HITL)
 │   │   ├── approve-user.tool.ts             #   Calls ProfileBuilder.finalize() — founders/admins (HITL)
 │   │   ├── update-user-profile.tool.ts      #   Role / displayName / persona changes (HITL)
+│   │   ├── view-user-profile.tool.ts        #   View role, persona, and preferences for a given user
 │   │   ├── save-interview.tool.ts           #   Persists OnboardingAgent interview data to session
 │   │   └── delegate-task.tool.ts            #   Signals Manager to hand off; returns terminateLoop: true
 │   │
@@ -615,8 +616,8 @@ Bootstrap shortcut:
 | `username` | String? | Telegram @handle (nullable) |
 | `displayName` | String | First name or interview-provided name |
 | `role` | Enum | `guest` / `member` / `admin` / `superadmin` |
-| `personaJson` | Json | Custom persona data from onboarding |
-| `preferencesJson` | Json | Work style preferences |
+| `personaJson` | Json | Identity facts (e.g. summary, coreSkills, pronouns) |
+| `preferencesJson` | Json | Interaction rules (e.g. technicalTone, allowProactiveDms, timezone, verbosityLevel) |
 | `onboardingStatus` | Enum | `pending` / `approved` / `denied` |
 | `isFoundingMember` | Boolean | Receives approval notifications |
 | `isActive` | Boolean | Soft delete flag |
